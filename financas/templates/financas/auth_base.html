@@ -40,7 +40,7 @@
     <div class="auth-form-topo">
       <a class="logo" href="{% url 'financas:inicio' %}"><img src="{% static 'financas/img/logo.svg' %}" alt=""><span>{{ marca.nome }}</span></a>
       {% block topo_direita %}{% endblock %}
-      <button type="button" class="tema-botao" onclick="trocarTema()" aria-label="{% if tema == 'claro' %}Usar tema escuro{% else %}Usar tema claro{% endif %}" title="{% if tema == 'claro' %}Usar tema escuro{% else %}Usar tema claro{% endif %}"><span class="icone-claro" aria-hidden="true">☀</span><span class="icone-escuro" aria-hidden="true">☾</span></button>
+      <button type="button" class="tema-switch" role="switch" onclick="trocarTema()" aria-label="Tema claro" title="Tema claro" aria-checked="{% if tema == 'claro' %}true{% else %}false{% endif %}"><span class="tema-trilho" aria-hidden="true"><span class="tema-fundo-icone sol">☀</span><span class="tema-fundo-icone lua">☾</span><span class="tema-bolinha"></span></span></button>
     </div>
     <div class="auth-caixa">
       {% for m in messages %}<div class="alerta {% if m.tags == 'error' %}erro{% else %}ok{% endif %}">{{ m }}</div>{% endfor %}

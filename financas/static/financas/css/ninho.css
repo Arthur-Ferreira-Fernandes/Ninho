@@ -1134,12 +1134,27 @@ html[data-tema="escuro"] .auth-form { background: var(--card); }
 html[data-tema="escuro"] .amostra { background: #1b2523; color: var(--txt); }
 html[data-tema="escuro"] .logo img { box-shadow: 0 0 0 1px rgba(255, 255, 255, .12); border-radius: 9px; }
 
-/* botão de tema */
-.tema-botao {
-  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid var(--borda); background: var(--sup-2); color: var(--txt); cursor: pointer; font-size: 1rem;
+/* switch de tema: desligado = escuro (lua), ligado = claro (sol) */
+.tema-switch { background: none; border: 0; padding: 4px; cursor: pointer; border-radius: 99px; line-height: 0; }
+.tema-switch:focus-visible { outline: 3px solid var(--ouro); outline-offset: 2px; }
+.tema-trilho {
+  position: relative; display: inline-block; width: 58px; height: 30px; border-radius: 99px;
+  background: var(--sup-3); border: 1px solid var(--borda); transition: background .2s;
 }
-.tema-botao:hover { background: var(--sup-3); }
-.tema-botao:focus-visible { outline: 3px solid var(--ouro); outline-offset: 2px; }
-.tema-botao .icone-claro, html[data-tema="escuro"] .tema-botao .icone-escuro { display: none; }
-html[data-tema="escuro"] .tema-botao .icone-claro { display: inline; }
+.tema-switch[aria-checked="true"] .tema-trilho { background: var(--marca-100); border-color: var(--marca-600); }
+.tema-fundo-icone {
+  position: absolute; top: 50%; transform: translateY(-50%); font-size: .8rem; line-height: 1; color: var(--muted);
+}
+/* o trilho mostra o tema do outro lado: no escuro, o sol à direita; no claro, a lua à esquerda */
+.tema-fundo-icone.lua { left: 9px; }
+.tema-fundo-icone.sol { right: 9px; }
+.tema-bolinha {
+  position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  display: grid; place-items: center; font-size: .85rem; line-height: 1; color: var(--txt);
+  transition: transform .2s ease;
+}
+.tema-bolinha::before { content: "☾"; }
+.tema-switch[aria-checked="true"] .tema-bolinha { transform: translateX(28px); }
+.tema-switch[aria-checked="true"] .tema-bolinha::before { content: "☀"; color: #b7791f; }
+@media (prefers-reduced-motion: reduce) { .tema-bolinha, .tema-trilho { transition: none; } }

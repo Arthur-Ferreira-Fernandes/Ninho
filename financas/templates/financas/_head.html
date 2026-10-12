@@ -15,9 +15,6 @@
       document.cookie = "tema=" + novo + "; path=/; max-age=31536000; SameSite=Lax";
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.content = novo === "claro" ? "#0f5e55" : "#0e1413";
-      document.querySelectorAll(".tema-botao").forEach((b) => {
-        b.setAttribute("aria-label", novo === "claro" ? "Usar tema escuro" : "Usar tema claro");
-        b.title = b.getAttribute("aria-label");
-      });
+      document.querySelectorAll(".tema-switch").forEach((b) => b.setAttribute("aria-checked", novo === "claro"));
     }
   </script>

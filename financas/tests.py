@@ -1519,18 +1519,18 @@ class TemaTests(TestCase):
     def test_escuro_por_padrao_e_botao(self):
         r = self.client.get(reverse("financas:entrar"))
         self.assertContains(r, 'data-tema="escuro"')
-        self.assertContains(r, 'class="tema-botao"')
-        self.assertContains(r, "Usar tema claro")
+        self.assertContains(r, 'role="switch"')
+        self.assertContains(r, 'aria-checked="false"')   # escuro = switch "tema claro" desligado
 
     def test_cookie_escolhe_o_tema(self):
         self.client.cookies["tema"] = "claro"
         r = self.client.get(reverse("financas:entrar"))
         self.assertContains(r, 'data-tema="claro"')
-        self.assertContains(r, "Usar tema escuro")
+        self.assertContains(r, 'aria-checked="true"')
         self.client.cookies["tema"] = "<script>"
         self.assertContains(self.client.get(reverse("financas:entrar")), 'data-tema="escuro"')
 
     def test_botao_na_area_logada(self):
         cadastrar(self.client)
         r = self.client.get(reverse("financas:conta_nova"))
-        self.assertContains(r, 'class="tema-botao"')
+        self.assertContains(r, 'class="tema-switch"')
