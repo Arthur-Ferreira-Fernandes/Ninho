@@ -99,6 +99,14 @@
       <p class="ajuda">Dias 29, 30 e 31: nos meses mais curtos, cai no último dia do mês.</p>
     </div>
 
+    <details class="bloco-vigencia"{% if form.vigente_desde.value or form.vigente_ate.value or form.vigente_ate.errors %} open{% endif %}>
+      <summary>Período (opcional): quando começa ou termina</summary>
+      <div class="campos-2">
+        {% with field=form.vigente_desde %}{% include "financas/_campo.html" %}{% endwith %}
+        {% with field=form.vigente_ate %}{% include "financas/_campo.html" %}{% endwith %}
+      </div>
+    </details>
+
     {% if form.ativa %}
     <label class="interruptor">
       {{ form.ativa }}

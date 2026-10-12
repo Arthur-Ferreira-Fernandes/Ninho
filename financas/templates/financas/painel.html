@@ -479,7 +479,10 @@
             {% if i.obj.salario %}<span class="etiqueta">salário</span>{% endif %}
             {% if i.obj.periodica %}<span class="etiqueta etiqueta-periodica">a cada {{ i.obj.intervalo_dias }} dias</span>
             {% elif i.obj.variavel %}<span class="etiqueta etiqueta-variavel" title="O valor muda todo mês; o valor mostrado é a estimativa">varia</span>{% endif %}
-            {% if i.inativa %}<span class="etiqueta neutra">pausada</span>{% endif %}
+            {% if not i.obj.ativa %}<span class="etiqueta neutra">pausada</span>
+            {% elif i.obj.vigente_ate and i.obj.vigente_ate < hoje %}<span class="etiqueta neutra">encerrada em {{ i.obj.vigente_ate|date:"d/m/Y" }}</span>
+            {% elif i.futura %}<span class="etiqueta etiqueta-futura">começa em {{ i.obj.vigente_desde|date:"d/m/Y" }}</span>
+            {% elif i.obj.vigente_ate %}<span class="etiqueta etiqueta-futura">até {{ i.obj.vigente_ate|date:"d/m/Y" }}</span>{% endif %}
             {% if i.obj.periodica and not i.inativa %}
               <small class="a-pagar">
                 {% if i.proxima_evento %}Próxima: {{ i.proxima_evento.data|date:"d/m/Y" }}{% if i.proxima_evento.data < hoje %} (atrasada){% endif %} ·

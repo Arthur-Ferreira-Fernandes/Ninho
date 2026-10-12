@@ -309,7 +309,7 @@ def _cartoes_com_proxima_fatura(conta, hoje):
 
 def _investimentos(conta, hoje, meses_a_frente=12):
     """Histórico e previsão do que foi guardado (meses e avulsos), com o acumulado."""
-    if conta.guardar_mensal <= 0 and not conta.aportes.exists():
+    if conta.guardar_modo == Conta.GUARDAR_NADA and not conta.aportes.exists():
         return None
     ano_fim, mes_fim = divmod(hoje.year * 12 + hoje.month - 1 + meses_a_frente, 12)
     fim = date(ano_fim, mes_fim + 1, calendar.monthrange(ano_fim, mes_fim + 1)[1])
@@ -399,7 +399,9 @@ def _recorrentes(fixas, assinaturas, hoje):
     As inativas (pausadas ou canceladas) vão para o fim.
     """
     itens = [{"tipo": "fixa", "obj": f, "dia": f.dia, "nome": f.nome, "valor": f.valor,
-              "receita": f.tipo == ContaFixa.RECEITA, "inativa": not f.ativa,
+              "receita": f.tipo == ContaFixa.RECEITA,
+              "inativa": not f.ativa or (f.vigente_ate is not None and f.vigente_ate < hoje),
+              "futura": f.vigente_desde is not None and f.vigente_desde > hoje,
               **(_situacao_periodica(f, hoje) if f.periodica else
                  _situacao_do_mes(f, hoje) if f.variavel else {})} for f in fixas]
     itens += [{"tipo": "assinatura", "obj": a, "dia": a.dia_cobranca, "nome": a.descricao, "valor": a.valor,
@@ -486,7 +488,9 @@ def painel(request, pk):
         conferencias.append({"obj": c, "esperado": esperado, "diferenca": c.saldo_real - esperado})
 
     fixas = list(conta.fixas.prefetch_related("pagamentos"))
-    ativas = [f for f in fixas if f.ativa]
+    # totais do mês: só o que está valendo agora (salário novo, aluguel encerrado...)
+    ativas = [f for f in fixas if f.ativa and f.vigente_em(hoje if f.periodica else
+                                                          f.ocorrencia_no_mes(hoje.year, hoje.month))]
     assinaturas = _assinaturas(conta, hoje)
     receitas_fixas = sum((f.valor_mensal for f in ativas if f.tipo == ContaFixa.RECEITA), Decimal("0"))
     despesas_fixas = sum((f.valor_mensal for f in ativas if f.tipo == ContaFixa.DESPESA), Decimal("0"))

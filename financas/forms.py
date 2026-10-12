@@ -126,13 +126,22 @@ class PagamentoSalarioForm(forms.ModelForm):
 
     class Meta:
         model = ContaFixa
-        fields = ["dia", "valor"]
-        labels = {"dia": "Dia", "valor": "Valor"}
-        help_texts = {"dia": ""}
+        fields = ["dia", "valor", "vigente_desde", "vigente_ate"]
+        labels = {"dia": "Dia", "valor": "Valor", "vigente_desde": "A partir de", "vigente_ate": "Até"}
+        help_texts = {"dia": "", "vigente_desde": "", "vigente_ate": ""}
         widgets = {
             "dia": forms.NumberInput(attrs={"min": "1", "max": "31", "inputmode": "numeric", "placeholder": "Dia"}),
             "valor": _dinheiro(),
+            "vigente_desde": DATA,
+            "vigente_ate": DATA,
         }
+
+    def clean(self):
+        dados = super().clean()
+        desde, ate = dados.get("vigente_desde"), dados.get("vigente_ate")
+        if desde and ate and ate < desde:
+            self.add_error("vigente_ate", "O “até” não pode ser antes do “a partir de”.")
+        return dados
 
     def clean_dia(self):
         dia = self.cleaned_data["dia"]
@@ -179,9 +188,18 @@ class BasePagamentosSalario(forms.BaseInlineFormSet):
             p.conta = self.instance
             p.tipo = ContaFixa.RECEITA
             p.salario = True
-            p.nome = "Salário" if len(mantidos) == 1 else f"Salário (dia {p.dia})"
+            p.nome = _nome_do_pagamento(p, len(mantidos))
             p.save()
         return pagamentos
+
+
+def _nome_do_pagamento(p, quantidade):
+    detalhes = [] if quantidade == 1 else [f"dia {p.dia}"]
+    if p.vigente_desde:
+        detalhes.append(f"a partir de {p.vigente_desde:%m/%Y}")
+    if p.vigente_ate:
+        detalhes.append(f"até {p.vigente_ate:%m/%Y}")
+    return "Salário" + (f" ({', '.join(detalhes)})" if detalhes else "")
 
 
 PagamentosSalarioFormSet = forms.inlineformset_factory(
@@ -199,10 +217,12 @@ class ContaFixaForm(forms.ModelForm):
 
     class Meta:
         model = ContaFixa
-        fields = ["tipo", "nome", "variavel", "valor", "frequencia", "dia", "intervalo_dias", "proxima", "ativa"]
+        fields = ["tipo", "nome", "variavel", "valor", "frequencia", "dia", "intervalo_dias", "proxima",
+                  "vigente_desde", "vigente_ate", "ativa"]
         labels = {"tipo": "Tipo", "nome": "Descrição", "valor": "Valor", "ativa": "Ativa",
                   "variavel": "O valor muda todo mês", "frequencia": "Com que frequência",
-                  "intervalo_dias": "A cada quantos dias", "proxima": "Próxima vez"}
+                  "intervalo_dias": "A cada quantos dias", "proxima": "Próxima vez",
+                  "vigente_desde": "Vale a partir de", "vigente_ate": "Vale até"}
         help_texts = {"ativa": "Desligada, deixa de contar em todos os meses, inclusive nos que já passaram.",
                       "variavel": "Luz, água, mercado… O valor abaixo vira uma estimativa, e a cada mês "
                                   "você marca como paga informando o valor real."}
@@ -214,10 +234,14 @@ class ContaFixaForm(forms.ModelForm):
             "intervalo_dias": forms.NumberInput(attrs={"min": "1", "max": "3650", "inputmode": "numeric",
                                                        "placeholder": "Ex.: 45"}),
             "proxima": DATA,
+            "vigente_desde": DATA,
+            "vigente_ate": DATA,
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["vigente_desde"].help_text = ""
+        self.fields["vigente_ate"].help_text = "Ex.: o aluguel termina quando você se mudar. Os meses anteriores continuam valendo."
         if not self.instance.pk:
             del self.fields["ativa"]  # novas já nascem ativas
         if self.instance.salario:
@@ -231,6 +255,9 @@ class ContaFixaForm(forms.ModelForm):
 
     def clean(self):
         dados = super().clean()
+        desde, ate = dados.get("vigente_desde"), dados.get("vigente_ate")
+        if desde and ate and ate < desde:
+            self.add_error("vigente_ate", "O “vale até” não pode ser antes do “vale a partir de”.")
         if "frequencia" not in self.fields:   # salário: sempre mensal, só o dia importa
             if not dados.get("dia"):
                 self.add_error("dia", "Escolha o dia do mês.")

@@ -33,7 +33,7 @@
 
     <fieldset class="secao" id="secao-salario">
       <legend>Sua renda</legend>
-      <p class="ajuda-secao">Informe em que dias do mês o salário cai e quanto em cada um (ex.: adiantamento no dia 15 e o restante no dia 30). Cada pagamento entra como receita fixa.</p>
+      <p class="ajuda-secao">Informe em que dias do mês o salário cai e quanto em cada um (ex.: adiantamento no dia 15 e o restante no dia 30). Cada pagamento entra como receita fixa. Para um <b>aumento ou redução previstos</b>, use o ícone de calendário: deixe o valor atual valendo <b>até</b> o último mês e adicione outro pagamento valendo <b>a partir de</b> quando o novo começa.</p>
 
       {{ pagamentos.management_form }}
       {% for erro in pagamentos.non_form_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
@@ -49,7 +49,8 @@
       <button type="button" class="btn-adicionar" id="add-pagamento">+ Adicionar pagamento</button>
 
       <div class="total-salario" id="total-salario" hidden>
-        <span>Salário mensal</span><b id="total-salario-valor">R$ 0,00</b>
+        <div class="total-linha"><span>Salário mensal hoje</span><b id="total-salario-valor">R$ 0,00</b></div>
+        <ul class="linha-do-tempo" id="linha-do-tempo"></ul>
       </div>
     </fieldset>
 
@@ -207,8 +208,35 @@
   function linhasAtivas() {
     return [...lista.querySelectorAll(".pagamento")].filter((l) => !l.classList.contains("removido"));
   }
-  function totalSalario() {
-    return linhasAtivas().reduce((t, l) => t + num(l.querySelector("[name$=-valor]")), 0);
+  // salário de um mês: só os pagamentos válidos na data em que caem naquele mês
+  const hojeSal = new Date(); hojeSal.setHours(12, 0, 0, 0);
+  const dataCampo = (l, nome) => { const v = l.querySelector("[name$=-" + nome + "]").value; return v ? new Date(v + "T12:00") : null; };
+  function totalSalario(ref) {
+    ref = ref || hojeSal;
+    return linhasAtivas().reduce((t, l) => {
+      const dia = Math.max(1, Math.min(31, parseInt(l.querySelector("[name$=-dia]").value, 10) || 1));
+      const ocorre = new Date(ref.getFullYear(), ref.getMonth(), Math.min(dia, new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate()), 12);
+      const desde = dataCampo(l, "vigente_desde"), ate = dataCampo(l, "vigente_ate");
+      if ((desde && ocorre < desde) || (ate && ocorre > ate)) return t;
+      return t + num(l.querySelector("[name$=-valor]"));
+    }, 0);
+  }
+  function linhaDoTempo() {
+    // meses em que o salário muda: inícios e fins (mês seguinte ao "até") daqui pra frente
+    const meses = new Set();
+    linhasAtivas().forEach((l) => {
+      const desde = dataCampo(l, "vigente_desde"), ate = dataCampo(l, "vigente_ate");
+      if (desde) meses.add(desde.getFullYear() * 12 + desde.getMonth());
+      if (ate) meses.add(ate.getFullYear() * 12 + ate.getMonth() + 1);
+    });
+    const agora = hojeSal.getFullYear() * 12 + hojeSal.getMonth();
+    let anterior = totalSalario();
+    return [...meses].filter((m) => m > agora).sort((a, b) => a - b).map((m) => {
+      const ref = new Date(Math.floor(m / 12), m % 12, 28, 12);
+      const valor = totalSalario(ref), mudanca = valor - anterior;
+      anterior = valor;
+      return { ref, valor, mudanca };
+    }).filter((x) => x.mudanca !== 0);
   }
   function adicionarLinha() {
     const i = +totalForms.value;
@@ -224,6 +252,13 @@
     atualizar();
   });
   lista.addEventListener("click", (e) => {
+    const per = e.target.closest(".periodo-pagamento");
+    if (per) {
+      const caixa = per.closest(".pagamento").querySelector(".pagamento-periodo");
+      caixa.hidden = !caixa.hidden;
+      if (!caixa.hidden) caixa.querySelector("input").focus();
+      return;
+    }
     const bt = e.target.closest(".remover-pagamento");
     if (!bt) return;
     const linha = bt.closest(".pagamento");
@@ -300,8 +335,22 @@
     let valorMes = 0;
     const salario = totalSalario();
     const caixaTotal = document.getElementById("total-salario");
-    caixaTotal.hidden = linhasAtivas().length < 2 && salario === 0;
+    const mudancas = linhaDoTempo();
+    caixaTotal.hidden = linhasAtivas().length < 2 && salario === 0 && !mudancas.length;
     document.getElementById("total-salario-valor").textContent = brl.format(salario);
+    const tempo = document.getElementById("linha-do-tempo");
+    tempo.replaceChildren();
+    mudancas.forEach((x) => {
+      const li = document.createElement("li");
+      const quando = x.ref.toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+      const r = document.createElement("span"); r.textContent = "A partir de " + quando;
+      const b = document.createElement("b"); b.textContent = brl.format(x.valor);
+      const d = document.createElement("small");
+      d.className = x.mudanca > 0 ? "aumento" : "reducao";
+      d.textContent = (x.mudanca > 0 ? "▲ +" : "▼ ") + brl.format(x.mudanca);
+      li.append(r, b, d);
+      tempo.appendChild(li);
+    });
 
     if (m === "percentual") valorMes = salario * num(pct) / 100;
     else if (m === "mensal") valorMes = num(mensal);

@@ -96,7 +96,17 @@ def _eventos_periodicos(fixa, inicio, fim):
 
 
 def eventos_fixa(fixa, inicio, fim):
-    """Ocorrências da conta fixa que mexem na conta entre inicio e fim (inclusive)."""
+    """Ocorrências da conta fixa que mexem na conta entre inicio e fim (inclusive).
+
+    Respeita o período de validade (vigente_desde / vigente_ate) pela data prevista.
+    """
+    eventos = _eventos_sem_vigencia(fixa, inicio, fim)
+    if fixa.vigente_desde is None and fixa.vigente_ate is None:
+        return eventos
+    return [e for e in eventos if fixa.vigente_em(e.vencimento)]
+
+
+def _eventos_sem_vigencia(fixa, inicio, fim):
     if fixa.periodica:
         return _eventos_periodicos(fixa, inicio, fim)
     if not fixa.variavel:
@@ -140,8 +150,9 @@ def simular_mes(conta, ano, mes, usos=None):
         usos = _usos(conta, inicio, ultimo)
 
     dias_ativos = (ultimo - inicio).days + 1
-    restante = (conta.orcamento_mensal * dias_ativos / dias_no_mes).quantize(CENTAVO)
-    base = (conta.orcamento_mensal / dias_no_mes).quantize(CENTAVO)
+    orcamento = conta.orcamento_mensal_em(date(ano, mes, 1))   # muda com o salário do mês
+    restante = (orcamento * dias_ativos / dias_no_mes).quantize(CENTAVO)
+    base = (orcamento / dias_no_mes).quantize(CENTAVO)
     resultado = []
     for i in range(dias_ativos):
         d = inicio + timedelta(days=i)
@@ -655,7 +666,7 @@ def dia_de_guardar(conta, ano, mes):
     if (ano, mes) in cache:
         return cache[(ano, mes)]
 
-    previsto_valor = conta.guardar_mensal
+    previsto_valor = conta.guardar_mensal_em(date(ano, mes, 1))
     confirmado = _aportes(conta)[0].get((ano, mes))
     if confirmado:
         resultado = Guardar(confirmado.data, confirmado.valor, confirmado=True, aporte=confirmado,
@@ -681,7 +692,7 @@ def dia_de_guardar(conta, ano, mes):
 def guardados(conta, inicio, fim):
     """Tudo o que foi (ou será) guardado entre inicio e fim: meses e avulsos, por data."""
     mensais, avulsos = _aportes(conta)
-    if conta.guardar_mensal <= 0 and not mensais and not avulsos:
+    if conta.guardar_modo == conta.GUARDAR_NADA and not mensais and not avulsos:
         return []
     inicio = max(inicio, conta.data_inicio)
     if fim < inicio:

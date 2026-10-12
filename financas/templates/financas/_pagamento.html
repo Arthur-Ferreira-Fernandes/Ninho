@@ -11,7 +11,24 @@
     {% for e in f.valor.errors %}<p class="erro">{{ e }}</p>{% endfor %}
   </div>
   <span hidden>{{ f.DELETE }}</span>
+  <div class="pagamento-botoes">
+  <button type="button" class="periodo-pagamento{% if f.vigente_desde.value or f.vigente_ate.value %} ativo{% endif %}"
+          aria-label="Definir período (aumento ou redução previstos)" title="Período: a partir de / até">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="10" rx="2"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/></svg>
+  </button>
   <button type="button" class="remover-pagamento" aria-label="Remover pagamento" title="Remover">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>
   </button>
+  </div>
+  <div class="pagamento-periodo"{% if not f.vigente_desde.value and not f.vigente_ate.value and not f.vigente_ate.errors %} hidden{% endif %}>
+    <div class="campo">
+      <label for="{{ f.vigente_desde.id_for_label }}">A partir de <span class="opcional">(opcional)</span></label>
+      <div class="campo-input">{{ f.vigente_desde }}</div>
+    </div>
+    <div class="campo{% if f.vigente_ate.errors %} com-erro{% endif %}">
+      <label for="{{ f.vigente_ate.id_for_label }}">Até <span class="opcional">(opcional)</span></label>
+      <div class="campo-input">{{ f.vigente_ate }}</div>
+      {% for e in f.vigente_ate.errors %}<p class="erro">{{ e }}</p>{% endfor %}
+    </div>
+  </div>
 </div>

@@ -1534,3 +1534,80 @@ class TemaTests(TestCase):
         cadastrar(self.client)
         r = self.client.get(reverse("financas:conta_nova"))
         self.assertContains(r, 'class="tema-switch"')
+
+
+class VigenciaTests(TestCase):
+    """Salário com aumento/redução previstos e contas fixas com começo e fim."""
+
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        # dia a dia = 20% do salário; guardar = 10% do salário
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
+                                          data_inicio=date(2026, 11, 1), modo_gasto=Conta.PERCENTUAL,
+                                          percentual_gasto=Decimal("20"), guardar_modo=Conta.GUARDAR_PERCENTUAL,
+                                          guardar_percentual=Decimal("10"))
+        ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("4500"), dia=5, tipo=ContaFixa.RECEITA,
+                                 salario=True, vigente_ate=date(2026, 12, 31))
+        ContaFixa.objects.create(conta=self.conta, nome="Salário novo", valor=Decimal("5000"), dia=5,
+                                 tipo=ContaFixa.RECEITA, salario=True, vigente_desde=date(2027, 1, 1))
+
+    def nova(self):
+        return Conta.objects.get(pk=self.conta.pk)
+
+    def test_salario_muda_no_mes_do_aumento(self):
+        conta = self.nova()
+        self.assertEqual(conta.salario_em(date(2026, 12, 10)), Decimal("4500"))
+        self.assertEqual(conta.salario_em(date(2027, 1, 10)), Decimal("5000"))
+        self.assertEqual(conta.orcamento_mensal_em(date(2026, 12, 1)), Decimal("900"))
+        self.assertEqual(conta.orcamento_mensal_em(date(2027, 1, 1)), Decimal("1000"))
+        self.assertEqual(conta.guardar_mensal_em(date(2027, 1, 1)), Decimal("500.00"))
+        self.assertEqual(sum(d.gasto for d in simular_mes(conta, 2027, 1)), Decimal("1000"))
+        self.assertEqual(dia_de_guardar(conta, 2026, 12).valor, Decimal("450.00"))
+        self.assertEqual(dia_de_guardar(self.nova(), 2027, 1).valor, Decimal("500.00"))
+
+    def test_receitas_respeitam_o_periodo_e_extrato_bate(self):
+        conta = self.nova()
+        dez = [m for d in extrato_mes(conta, 2026, 12) for m in d.movimentos if m.origem == "fixa"]
+        jan = [m for d in extrato_mes(self.nova(), 2027, 1) for m in d.movimentos if m.origem == "fixa"]
+        self.assertEqual([(m.nome, m.valor) for m in dez], [("Salário", Decimal("4500"))])
+        self.assertEqual([(m.nome, m.valor) for m in jan], [("Salário novo", Decimal("5000"))])
+        for d in extrato_mes(self.nova(), 2026, 12) + extrato_mes(self.nova(), 2027, 1):
+            self.assertEqual(d.esperado, saldo_esperado(self.nova(), d.data).esperado, d.data)
+
+    def test_aluguel_encerrado_nao_muda_o_passado(self):
+        aluguel = ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1500"), dia=10)
+        antes = saldo_esperado(self.nova(), date(2026, 12, 31)).esperado
+        aluguel.vigente_ate = date(2026, 12, 31)
+        aluguel.save()
+        self.assertEqual(saldo_esperado(self.nova(), date(2026, 12, 31)).esperado, antes)   # passado intacto
+        self.assertEqual([e.data for e in eventos_fixa(aluguel, date(2026, 11, 1), date(2027, 3, 31))],
+                         [date(2026, 11, 10), date(2026, 12, 10)])
+
+    def test_formulario_do_salario_com_periodo(self):
+        url = reverse("financas:conta_editar", args=[self.conta.pk])
+        dados = campos(self.client.get(url), "form-conta")
+        self.assertEqual(dados["salario-0-vigente_ate"], "2026-12-31")
+        self.assertEqual(dados["salario-1-vigente_desde"], "2027-01-01")
+        dados["salario-1-vigente_ate"] = "2026-06-01"   # antes do início: inválido
+        r = self.client.post(url, dados)
+        self.assertContains(r, "não pode ser antes")
+        dados["salario-1-vigente_ate"] = ""
+        dados["salario-1-valor"] = "5200"
+        self.client.post(url, dados)
+        nomes = sorted(ContaFixa.objects.filter(conta=self.conta, salario=True).values_list("nome", "valor"))
+        self.assertEqual(nomes, [("Salário (dia 5, a partir de 01/2027)", Decimal("5200")),
+                                 ("Salário (dia 5, até 12/2026)", Decimal("4500"))])
+
+    def test_conta_fixa_com_periodo_e_lista(self):
+        url = reverse("financas:fixa_nova", args=[self.conta.pk])
+        r = self.client.post(url, {"tipo": "despesa", "nome": "Escola", "valor": "700", "frequencia": "mensal",
+                                   "dia": "10", "vigente_desde": "2027-02-01", "vigente_ate": "2027-01-01"})
+        self.assertContains(r, "não pode ser antes")
+        self.client.post(url, {"tipo": "despesa", "nome": "Escola", "valor": "700", "frequencia": "mensal",
+                               "dia": "10", "vigente_desde": "2099-02-01"})
+        escola = ContaFixa.objects.get(nome="Escola")
+        self.assertEqual(escola.vigente_desde, date(2099, 2, 1))
+        r = self.client.get(reverse("financas:painel", args=[self.conta.pk]))
+        self.assertContains(r, "começa em 01/02/2099")
+        self.assertEqual(r.context["totais_fixas"]["despesas"], 0)   # ainda não vale

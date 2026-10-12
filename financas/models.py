@@ -145,13 +145,16 @@ class Conta(models.Model):
         """Abaixo disto começa o vermelho: 1/4 da reserva."""
         return (self.reserva * self.FRACAO_QUASE_ACABANDO).quantize(Decimal("1"))
 
-    @property
-    def guardar_mensal(self):
+    def guardar_mensal_em(self, data):
         if self.guardar_modo == self.GUARDAR_PERCENTUAL:
-            return (self.salario * (self.guardar_percentual or 0) / 100).quantize(Decimal("0.01"))
+            return (self.salario_em(data) * (self.guardar_percentual or 0) / 100).quantize(Decimal("0.01"))
         if self.guardar_modo == self.GUARDAR_FIXO:
             return self.guardar_valor or Decimal("0")
         return Decimal("0")
+
+    @property
+    def guardar_mensal(self):
+        return self.guardar_mensal_em(date.today())
 
     @cached_property
     def pagamentos_salario(self):
@@ -159,21 +162,32 @@ class Conta(models.Model):
             return []
         return list(self.fixas.filter(salario=True, ativa=True).order_by("dia"))
 
+    def salario_em(self, data):
+        """Salário do mês de `data`: soma dos pagamentos válidos naquele mês.
+
+        Um salário pode cair em vários dias e mudar com o tempo (aumento ou redução).
+        """
+        return sum((p.valor for p in self.pagamentos_salario
+                    if p.vigente_em(p.ocorrencia_no_mes(data.year, data.month))), Decimal("0"))
+
     @property
     def salario(self):
-        """Salário mensal: soma dos pagamentos (um salário pode cair em vários dias)."""
-        return sum((p.valor for p in self.pagamentos_salario), Decimal("0"))
+        """Salário deste mês."""
+        return self.salario_em(date.today())
+
+    def orcamento_mensal_em(self, data):
+        if self.modo_gasto == self.PERCENTUAL:
+            return self.salario_em(data) * (self.percentual_gasto or 0) / 100
+        return self.gasto_mensal
 
     @property
     def orcamento_mensal(self):
-        if self.modo_gasto == self.PERCENTUAL:
-            return self.salario * (self.percentual_gasto or 0) / 100
-        return self.gasto_mensal
+        return self.orcamento_mensal_em(date.today())
 
     def gasto_diario_em(self, data):
-        """Valor diário no mês de `data` (o orçamento mensal dividido pelos dias do mês)."""
+        """Valor diário no mês de `data` (o orçamento daquele mês dividido pelos dias do mês)."""
         dias_no_mes = calendar.monthrange(data.year, data.month)[1]
-        return self.orcamento_mensal / dias_no_mes
+        return self.orcamento_mensal_em(data) / dias_no_mes
 
     @property
     def gasto_diario(self):
@@ -204,6 +218,10 @@ class ContaFixa(models.Model):
                   "e cada mês é marcado como pago com o valor real.",
     )
 
+    # Período de validade (opcional): para aumentos/reduções de salário, fim de um aluguel...
+    vigente_desde = models.DateField(null=True, blank=True, help_text="Vale a partir desta data.")
+    vigente_ate = models.DateField(null=True, blank=True, help_text="Vale até esta data (inclusive).")
+
     # Frequência: todo mês num dia fixo, ou a cada N dias (produtos do carro a cada 45 dias...).
     MENSAL = "mensal"
     DIAS = "dias"
@@ -215,6 +233,14 @@ class ContaFixa(models.Model):
         help_text="A cada X dias: data prevista da próxima vez. Depois de cada compra marcada, "
                   "a contagem recomeça da data real.",
     )
+
+    def vigente_em(self, data):
+        return ((self.vigente_desde is None or data >= self.vigente_desde)
+                and (self.vigente_ate is None or data <= self.vigente_ate))
+
+    def ocorrencia_no_mes(self, ano, mes):
+        """Data em que a conta mensal cai no mês (dias 29-31 viram o último dia)."""
+        return date(ano, mes, min(self.dia, calendar.monthrange(ano, mes)[1]))
 
     @property
     def periodica(self):
