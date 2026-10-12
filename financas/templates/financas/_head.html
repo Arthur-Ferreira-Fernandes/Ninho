@@ -1,8 +1,23 @@
 {% load static %}<meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f5e55">
+  <meta name="theme-color" content="{% if tema == 'claro' %}#0f5e55{% else %}#0e1413{% endif %}">
   <link rel="icon" type="image/svg+xml" href="{% static 'financas/img/favicon.svg' %}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'financas/css/ninho.css' %}">
+
+  <script>
+    // troca o tema na hora e guarda a escolha por 1 ano (o servidor lê o cookie)
+    function trocarTema() {
+      const novo = document.documentElement.dataset.tema === "claro" ? "escuro" : "claro";
+      document.documentElement.dataset.tema = novo;
+      document.cookie = "tema=" + novo + "; path=/; max-age=31536000; SameSite=Lax";
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = novo === "claro" ? "#0f5e55" : "#0e1413";
+      document.querySelectorAll(".tema-botao").forEach((b) => {
+        b.setAttribute("aria-label", novo === "claro" ? "Usar tema escuro" : "Usar tema claro");
+        b.title = b.getAttribute("aria-label");
+      });
+    }
+  </script>

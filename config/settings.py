@@ -64,6 +64,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'financas.context_processors.marca',
+                'financas.context_processors.tema',
             ],
         },
     },
