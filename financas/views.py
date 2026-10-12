@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (alerta_saldo, aplicar_escala, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -435,6 +435,24 @@ def _compras_com_andamento(conta, hoje):
     return lista
 
 
+def _historico_meses(conta, hoje, mes_aberto, dias_mes_aberto, antes=6, depois=2):
+    """Recebido − gasto dos últimos meses, do atual e dos próximos (previsão)."""
+    atual = hoje.replace(day=1)
+    linhas = []
+    for k in range(-antes, depois + 1):
+        ano, mes = divmod(atual.year * 12 + atual.month - 1 + k, 12)
+        primeiro = date(ano, mes + 1, 1)
+        if date(ano, mes + 1, calendar.monthrange(ano, mes + 1)[1]) < conta.data_inicio:
+            continue
+        # o mês aberto no extrato já foi calculado
+        dias = dias_mes_aberto if primeiro == mes_aberto else extrato_mes(conta, primeiro.year, primeiro.month)
+        t = totais_do_mes(dias)
+        if t:
+            linhas.append({"mes": primeiro, "atual": primeiro == atual, "previsao": primeiro > atual,
+                           "aberto": primeiro == mes_aberto, **t})
+    return linhas
+
+
 def _resumo_mes(ativos, hoje):
     """Como o mês foi (ou deve ser): saldo no começo e no fim, o menor saldo e dias no negativo."""
     if not ativos:
@@ -505,6 +523,8 @@ def painel(request, pk):
         "alerta": alerta_saldo(conta, hoje),
         "vazios_inicio": vazios_inicio,
         "resumo_mes": _resumo_mes(ativos, hoje),
+        "totais_mes": totais_do_mes(dias),
+        "historico_meses": _historico_meses(conta, hoje, primeiro, dias),
         "pode_voltar": primeiro > conta.data_inicio.replace(day=1),
         "anos_seletor": meses_do_seletor(
             conta, min(conta.data_inicio.year, primeiro.year), max(hoje.year + 1, primeiro.year), hoje),

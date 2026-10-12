@@ -734,3 +734,27 @@ def guardados(conta, inicio, fim):
                   for a in avulsos if inicio <= a.data <= fim]
     resultado.sort(key=lambda g: (g.data, g.avulso))
     return resultado
+
+
+def totais_do_mes(dias):
+    """Recebido, gasto e o que sobrou no mês, a partir dos dias de extrato_mes().
+
+    Gasto = contas fixas, faturas, lançamentos de saída e dinheiro do dia a dia.
+    O valor guardado (investido) não é gasto, mas sai do orçamento:
+    sobra = recebido − gasto − guardado.
+    """
+    ativos = [d for d in dias if d.ativo]
+    if not ativos:
+        return None
+    recebido = sum((d.entradas for d in ativos), ZERO)
+    guardado = sum((m.valor for d in ativos for m in d.movimentos if m.origem == "guardar"), ZERO)
+    gasto = sum((d.saidas + d.gasto for d in ativos), ZERO) - guardado
+    return {
+        "recebido": recebido,
+        "gasto": gasto,
+        "resultado": recebido - gasto,
+        "guardado": guardado,
+        "sobra": recebido - gasto - guardado,
+        "dia_a_dia": sum((d.gasto for d in ativos), ZERO),
+        "fim": ativos[-1].esperado,
+    }

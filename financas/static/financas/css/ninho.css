@@ -1239,3 +1239,26 @@ details.encerrar > summary::-webkit-details-marker { display: none; }
 .segmentado input:focus-visible + span { outline: 3px solid var(--ouro); outline-offset: 1px; }
 #campo-fim[hidden] { display: none; }
 .etiqueta { display: inline-block; white-space: nowrap; }
+
+/* recebido − gasto */
+.resultado-mes { display: grid; gap: 4px; margin: 12px 0 0; padding: 10px 12px; background: var(--sup-2); border-radius: var(--raio-sm); }
+.resultado-mes > div { display: flex; justify-content: space-between; font-size: .85rem; }
+.resultado-mes > div span { color: var(--muted); }
+.resultado-mes b { font-variant-numeric: tabular-nums; }
+.resultado-mes .resultado-total { border-top: 1px solid var(--borda); padding-top: 6px; margin-top: 2px; }
+.resultado-mes .resultado-total span { color: var(--txt); font-weight: 700; }
+.resultado-mes .resultado-total b { font-size: 1.05rem; }
+.resultado-mes small { font-size: .72rem; color: var(--roxo-txt); }
+.rodape-sobra { font-weight: 600; white-space: nowrap; }
+.mes-a-mes { margin-top: 16px; }
+.mes-a-mes-tabela td { white-space: nowrap; }
+.mes-a-mes-tabela tr.previsto td { color: var(--muted); }
+.mes-a-mes-tabela tr.previsto b { opacity: .8; }
+.mes-a-mes-tabela tr.aberto td { background: var(--marca-50); }
+.mes-a-mes-tabela .etiqueta { margin-left: 6px; }
+.barra-resultado { display: block; height: 4px; margin-top: 4px; background: var(--sup-3); border-radius: 99px; overflow: hidden; }
+.barra-resultado i { display: block; height: 100%; max-width: 100%; border-radius: inherit; }
+.barra-resultado i.pos { background: var(--pos); }
+.barra-resultado i.neg { background: var(--neg); }
+.investido { color: var(--roxo-txt); }
+.resultado-mes small { color: var(--muted); }

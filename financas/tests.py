@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .calculos import Dia, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
+from .calculos import Dia, totais_do_mes, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
 from .models import (Aporte, AssinaturaCartao, GastoDia, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro,
                      PedidoEntrada, UsoDiario)
 
@@ -1774,3 +1774,46 @@ class EncerrarTests(TestCase):
         self.client.post(url, dados)
         self.aluguel.refresh_from_db()
         self.assertEqual(self.aluguel.vigente_ate, date(2026, 8, 31))
+
+
+class RecebidoMenosGastoTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        # janeiro/2026: 310/mês de dia a dia (10/dia), guardar 500 fixo
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("310"),
+                                          guardar_modo=Conta.GUARDAR_FIXO, guardar_valor=Decimal("500"))
+        ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("4000"), dia=5,
+                                 tipo=ContaFixa.RECEITA, salario=True)
+        ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1500"), dia=10)
+        Lancamento.objects.create(conta=self.conta, data=date(2026, 1, 20), descricao="Freela", valor=Decimal("300"),
+                                  tipo=Lancamento.ENTRADA)
+        Lancamento.objects.create(conta=self.conta, data=date(2026, 1, 21), descricao="Presente", valor=Decimal("120"))
+        cartao = Cartao.objects.create(conta=self.conta, nome="Roxinho", dia_fechamento=3, dia_vencimento=10)
+        CompraCartao.objects.create(cartao=cartao, descricao="TV", valor_total=Decimal("200"), parcelas=1,
+                                    data_compra=date(2026, 1, 1))   # fatura de jan, vence 10/01
+
+    def test_totais_e_consistencia(self):
+        conta = Conta.objects.get(pk=self.conta.pk)
+        t = totais_do_mes(extrato_mes(conta, 2026, 1))
+        self.assertEqual(t["recebido"], Decimal("4300"))                      # salário + freela
+        self.assertEqual(t["guardado"], Decimal("500"))
+        self.assertEqual(t["dia_a_dia"], Decimal("310"))
+        self.assertEqual(t["gasto"], Decimal("1500") + 120 + 200 + 310)      # aluguel + presente + fatura + dia a dia
+        self.assertEqual(t["resultado"], Decimal("4300") - Decimal("2130"))
+        self.assertEqual(t["sobra"], Decimal("4300") - Decimal("2130") - Decimal("500"))   # menos o investido
+        # o que sobrou menos o que foi guardado = quanto o saldo da conta variou no mês
+        self.assertEqual(t["sobra"], t["fim"] - conta.saldo_inicial)
+
+    def test_painel_mostra_mes_e_historico(self):
+        r = self.client.get(reverse("financas:painel", args=[self.conta.pk]) + "?mes=2026-01")
+        self.assertEqual(r.context["totais_mes"]["sobra"], Decimal("1670"))
+        self.assertContains(r, "Sobra do mês")
+        self.assertContains(r, "− Investido")
+        historico = r.context["historico_meses"]
+        meses = [m["mes"] for m in historico]
+        self.assertEqual(meses, sorted(meses))
+        self.assertTrue(any(m["atual"] for m in historico))
+        self.assertTrue(all(m["previsao"] for m in historico if m["mes"] > date.today().replace(day=1)))
+        self.assertEqual(len([m for m in historico if m["previsao"]]), 2)

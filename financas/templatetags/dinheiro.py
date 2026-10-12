@@ -17,3 +17,12 @@ def brl(valor):
 def sub(valor, outro):
     """Subtração para templates: {{ a|sub:b }}."""
     return valor - outro
+
+
+@register.filter
+def abs_valor(valor):
+    """Valor absoluto para templates."""
+    try:
+        return abs(valor)
+    except TypeError:
+        return valor

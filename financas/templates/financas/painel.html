@@ -127,7 +127,7 @@
             <td class="num col-opc pos">{{ totais.entradas|brl }}</td>
             <td class="num col-opc neg">{{ totais.saidas|brl }}</td>
             <td class="num col-opc">{{ totais.gasto|brl }}</td>
-            <td colspan="2"></td>
+            <td colspan="2" class="num">{% if totais_mes %}<span class="rodape-sobra">sobra <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{{ totais_mes.sobra|brl }}</b></span>{% endif %}</td>
           </tr>
         </tfoot>
       </table>
@@ -207,6 +207,16 @@
       <p class="legenda-nota">Reserva mínima: {{ legenda.reserva|brl }} (<a href="{% url 'financas:conta_editar' conta.pk %}#reserva">alterar</a>). Contorno tracejado = previsão.</p>
     </div>
 
+    {% if totais_mes %}
+    <div class="resultado-mes">
+      <div><span>Recebido</span><b class="pos">{{ totais_mes.recebido|brl }}</b></div>
+      <div><span>− Gasto</span><b class="neg">{{ totais_mes.gasto|brl }}</b></div>
+      <div><span>− Investido</span><b class="investido">{{ totais_mes.guardado|brl }}</b></div>
+      <div class="resultado-total"><span>= Sobra do mês</span>
+        <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{% if totais_mes.sobra > 0 %}+{% endif %}{{ totais_mes.sobra|brl }}</b></div>
+      <small>O investido não é gasto, mas sai do orçamento do mês.</small>
+    </div>
+    {% endif %}
     {% if resumo_mes %}
     <dl class="resumo-mes">
       <div><dt>Começou com</dt><dd>{{ resumo_mes.inicio|brl }}</dd></div>
@@ -466,6 +476,37 @@
   </aside>
   </div>
 </section>
+
+{% if historico_meses %}
+<div class="card mes-a-mes">
+  <div class="topo">
+    <div>
+      <h2 style="margin:0">Sobra do orçamento, mês a mês</h2>
+      <p class="rotulo" style="margin:4px 0 0">Sobra = recebido − gasto − investido. Gasto inclui contas fixas, cartão, dinheiro do dia a dia e lançamentos; o investido não é gasto, mas sai do orçamento.</p>
+    </div>
+  </div>
+  <div class="tabela-rolagem-x">
+  <table class="lista mes-a-mes-tabela">
+    <thead><tr><th>Mês</th><th class="num">Recebido</th><th class="num">Gasto</th><th class="num">Investido</th>
+      <th class="num">Sobra</th><th class="num col-opc">Fechou com</th></tr></thead>
+    <tbody>
+    {% for m in historico_meses %}
+    <tr class="{% if m.previsao %}previsto{% endif %}{% if m.aberto %} aberto{% endif %}">
+      <td><a href="?mes={{ m.mes|date:'Y-m' }}#extrato">{{ m.mes|date:"F/Y"|capfirst }}</a>
+        {% if m.atual %}<span class="etiqueta">este mês</span>{% elif m.previsao %}<span class="etiqueta neutra">previsão</span>{% endif %}</td>
+      <td class="num pos">{{ m.recebido|brl }}</td>
+      <td class="num neg">{{ m.gasto|brl }}</td>
+      <td class="num investido">{% if m.guardado %}{{ m.guardado|brl }}{% else %}—{% endif %}</td>
+      <td class="num"><b class="{% if m.sobra < 0 %}neg{% else %}pos{% endif %}">{% if m.sobra > 0 %}+{% endif %}{{ m.sobra|brl }}</b>
+        <span class="barra-resultado" aria-hidden="true"><i class="{% if m.sobra < 0 %}neg{% else %}pos{% endif %}" style="width: {% widthratio m.sobra|abs_valor m.recebido|default:1 100 %}%"></i></span></td>
+      <td class="num col-opc {% if m.fim < 0 %}neg{% endif %}">{{ m.fim|brl }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
 
 <details class="card calculo">
   <summary>Como o saldo esperado de {{ dia.data|date:"d/m/Y" }} foi calculado (desde o início)</summary>
