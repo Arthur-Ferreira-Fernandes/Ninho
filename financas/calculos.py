@@ -311,35 +311,72 @@ def extrato_mes(conta, ano, mes):
     return dias
 
 
-# Escala divergente do saldo esperado: verde (positivo) ↔ cinza (zero) ↔ laranja (negativo).
+# Escala de cores do saldo, com a reserva mínima como ponto de virada:
+#   n4 vermelho escuro  ≤ −reserva
+#   n3 vermelho         negativo
+#   n2 laranja          de 0 até metade da reserva   ("acabando")
+#   n1 amarelo          da metade da reserva até ela  ("atenção")
+#   p1..p4 verdes       acima da reserva, em 4 faixas iguais até reserva + referência
+# A referência dos verdes é o salário (ou, sem salário, o maior saldo do período).
 NIVEIS = 4
 
 
-def nivel_cor(valor, maximo):
-    """Nível na escala divergente: "z" perto de zero, "p1".."p4" positivo, "n1".."n4" negativo."""
-    if maximo == 0 or abs(valor) < maximo * Decimal("0.05"):
-        return "z"
-    nivel = min(NIVEIS, max(1, math.ceil(abs(valor) / maximo * NIVEIS)))
-    return f"{'p' if valor > 0 else 'n'}{nivel}"
+def nivel_cor(valor, reserva, referencia):
+    if valor < 0:
+        limite = reserva if reserva > 0 else referencia / NIVEIS
+        return "n4" if limite > 0 and valor <= -limite else "n3"
+    if valor < reserva:
+        return "n2" if valor < reserva / 2 else "n1"
+    if referencia <= 0:
+        return "p4"
+    faixa = referencia / NIVEIS
+    return f"p{min(NIVEIS, 1 + int((valor - reserva) / faixa))}"
 
 
-def aplicar_escala(dias):
-    """Define dia.cor ("p1".."p4", "z", "n1".."n4") e devolve a legenda.
+def referencia_cores(conta, valores):
+    """Referência dos verdes: o salário; sem salário, o maior saldo acima da reserva."""
+    if conta.salario > 0:
+        return conta.salario
+    return max((v - conta.reserva for v in valores), default=ZERO)
 
-    A intensidade é relativa ao maior saldo (em valor absoluto) do mês, com a mesma
-    escala para os dois lados, então valores do mesmo tamanho têm a mesma força.
-    """
-    ativos = [d for d in dias if d.ativo]
-    maximo = max((abs(d.esperado) for d in ativos), default=ZERO)
-    for d in dias:
-        d.cor = nivel_cor(d.esperado, maximo) if d.ativo else ""
 
-    passo = maximo / NIVEIS
+def legenda_cores(reserva, referencia):
+    faixa = referencia / NIVEIS if referencia > 0 else ZERO
     return {
-        "maximo": maximo,
-        "negativos": [{"cor": f"n{k}", "ate": -passo * k} for k in range(NIVEIS, 0, -1)],
-        "positivos": [{"cor": f"p{k}", "ate": passo * k} for k in range(1, NIVEIS + 1)],
-        "tem_negativo": any(d.esperado < 0 for d in ativos),
+        "reserva": reserva,
+        "referencia": referencia,
+        "verde_forte": reserva + faixa * (NIVEIS - 1),
+        "limite_negativo": reserva if reserva > 0 else faixa,
+    }
+
+
+def aplicar_escala(dias, conta):
+    """Define dia.cor para cada dia ativo e devolve a legenda."""
+    valores = [d.esperado for d in dias if d.ativo]
+    referencia = referencia_cores(conta, valores)
+    for d in dias:
+        d.cor = nivel_cor(d.esperado, conta.reserva, referencia) if d.ativo else ""
+    return legenda_cores(conta.reserva, referencia)
+
+
+def alerta_saldo(conta, hoje, dias=60):
+    """Primeiro dia abaixo da reserva e abaixo de zero nos próximos dias (ou None)."""
+    inicio = max(hoje, conta.data_inicio)
+    serie = serie_diaria(conta, inicio, inicio + timedelta(days=dias))
+    reserva = conta.reserva
+    abaixo = next((i for i, v in enumerate(serie) if v is not None and v < reserva), None)
+    if abaixo is None:
+        return None
+    negativo = next((i for i, v in enumerate(serie) if v is not None and v < 0), None)
+    pior = min(range(len(serie)), key=lambda i: serie[i])
+    return {
+        "reserva": reserva,
+        "abaixo_em": inicio + timedelta(days=abaixo),
+        "negativo_em": inicio + timedelta(days=negativo) if negativo is not None else None,
+        "pior_em": inicio + timedelta(days=pior),
+        "pior_valor": serie[pior],
+        "ja_esta": abaixo == 0,
+        "ja_negativa": negativo == 0,
     }
 
 
@@ -365,9 +402,9 @@ def meses_do_seletor(conta, ano_inicial, ano_final, hoje):
         anos.append({"ano": ano, "meses": meses})
 
     ativos = [m for a in anos for m in a["meses"] if m["ativo"]]
-    maximo = max((abs(m["fim"]) for m in ativos), default=ZERO)
+    referencia = referencia_cores(conta, [m["fim"] for m in ativos])
     for m in ativos:
-        m["cor"] = nivel_cor(m["fim"], maximo)
+        m["cor"] = nivel_cor(m["fim"], conta.reserva, referencia)
     return anos
 
 

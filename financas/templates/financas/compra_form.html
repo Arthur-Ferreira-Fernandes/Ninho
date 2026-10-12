@@ -108,12 +108,16 @@
           <div class="mapa" id="mi-dias"></div>
           <div class="mi-foco" id="mi-foco" aria-live="polite"></div>
           <div class="legenda" aria-label="Legenda das cores">
-            <div class="legenda-faixa">
-              <span class="c-n4"></span><span class="c-n3"></span><span class="c-n2"></span><span class="c-n1"></span>
-              <span class="c-z"></span>
-              <span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span>
+            <div class="legenda-faixa tres">
+              <div><span class="c-n4"></span><span class="c-n3"></span></div>
+              <div><span class="c-n2"></span><span class="c-n1"></span></div>
+              <div><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
             </div>
-            <div class="legenda-rotulos"><span id="mi-min">−</span><span>R$ 0</span><span id="mi-max">+</span></div>
+            <div class="legenda-grupos">
+              <span><b>Negativo</b>&lt; R$ 0</span>
+              <span><b>Acabando</b>&lt; <span id="mi-reserva">—</span></span>
+              <span><b>Confortável</b>escuro ≥ <span id="mi-forte">—</span></span>
+            </div>
             <p class="legenda-nota"><span class="mi-marca-parcela"></span> vence parcela ·
               <b class="mi-marca-alerta">!</b> fica negativo só por causa da compra · a mesma escala vale para todos os meses</p>
           </div>
@@ -219,12 +223,17 @@
   }
 
   // ---------- mapa de datas ----------
-  // escala divergente igual à do painel (financas/calculos.py: nivel_cor), mas com o
-  // máximo dos 24 meses, para a mesma cor valer o mesmo valor em qualquer mês
-  function nivelCor(v, maximo) {
-    if (!maximo || Math.abs(v) < maximo * 0.05) return "z";
-    const n = Math.min(4, Math.max(1, Math.ceil(Math.abs(v) / maximo * 4)));
-    return (v > 0 ? "p" : "n") + n;
+  // mesma escala do painel (financas/calculos.py: nivel_cor): vermelho abaixo de zero,
+  // laranja/amarelo abaixo da reserva mínima, verdes acima dela até reserva + referência
+  const RESERVA = Math.round((PROJ.reserva || 0) * 100);
+  function nivelCor(v, ref) {
+    if (v < 0) {
+      const limite = RESERVA > 0 ? RESERVA : ref / 4;
+      return limite > 0 && v <= -limite ? "n4" : "n3";
+    }
+    if (v < RESERVA) return v < RESERVA / 2 ? "n2" : "n1";
+    if (ref <= 0) return "p4";
+    return "p" + Math.min(4, 1 + Math.floor((v - RESERVA) / (ref / 4)));
   }
   const MESES = [];   // [{ano, mes, ini, fim}] índices da projeção em cada mês
   for (let i = 0; i < SEM.length; i++) {
@@ -264,7 +273,7 @@
   }
 
   function desenharMes() {
-    const { com, maximo, porDia, mesesComParcela } = estado;
+    const { com, ref, porDia } = estado;
     const m = MESES[mesAtual];
     el("mi-mes-nome").textContent = textoMes(m);
     el("mi-ant").disabled = mesAtual === 0;
@@ -290,7 +299,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.i = i;
-      b.className = "mapa-dia c-" + nivelCor(com[i], maximo);
+      b.className = "mapa-dia c-" + nivelCor(com[i], ref);
       if (porDia[i]) b.classList.add("tem-parcela");
       const alerta = com[i] < 0 && SEM[i] >= 0;
       if (alerta) b.classList.add("alerta-compra");
@@ -308,21 +317,18 @@
   }
 
   function desenharMapa(com, parcelas, n) {
-    // referência da escala: um salário (tom mais forte = um salário ou mais na conta).
-    // Sem salário cadastrado, usa o percentil 90 dos valores.
+    // referência dos verdes: um salário acima da reserva; sem salário, o maior saldo
     const salarioCentavos = Math.round(PROJ.salario * 100);
-    const absolutos = SEM.concat(com).map(Math.abs).sort((a, b) => a - b);
-    const maximo = salarioCentavos > 0 ? salarioCentavos : (absolutos[Math.floor((absolutos.length - 1) * 0.9)] || 0);
+    const ref = salarioCentavos > 0 ? salarioCentavos : Math.max(0, ...SEM.concat(com).map((v) => v - RESERVA));
     const porDia = {};
     parcelas.forEach((p) => {
       if (!p.conta) return;
       const i = indiceDaData(p.vencimento);
       if (i >= 0 && i < SEM.length) (porDia[i] = porDia[i] || []).push(p);
     });
-    estado = { com, maximo, porDia, n };
-    const ref = salarioCentavos > 0 ? " (1 salário)" : "";
-    el("mi-min").textContent = "−" + reais(maximo) + " ou menos";
-    el("mi-max").textContent = reais(maximo) + ref + " ou mais";
+    estado = { com, ref, porDia, n };
+    el("mi-reserva").textContent = reais(RESERVA);
+    el("mi-forte").textContent = reais(RESERVA + ref * 3 / 4);
 
     // faixa dos meses: cor do saldo no fim de cada mês
     const faixa = el("mi-meses");
@@ -333,7 +339,7 @@
       const temParcela = Object.keys(porDia).some((i) => i >= m.ini && i <= m.fim);
       let negPorCompra = false;
       for (let i = m.ini; i <= m.fim; i++) if (com[i] < 0 && SEM[i] >= 0) { negPorCompra = true; break; }
-      b.className = "mi-mes c-" + nivelCor(com[m.fim], maximo) + (temParcela ? " tem-parcela" : "") + (negPorCompra ? " alerta-compra" : "");
+      b.className = "mi-mes c-" + nivelCor(com[m.fim], ref) + (temParcela ? " tem-parcela" : "") + (negPorCompra ? " alerta-compra" : "");
       b.textContent = textoMes(m, true);
       b.title = textoMes(m) + ": fecha com " + reais(com[m.fim]) + " (sem a compra " + reais(SEM[m.fim]) + ")";
       b.addEventListener("click", () => { mesAtual = k; mesEscolhido = true; diaFoco = null; desenharMes(); });

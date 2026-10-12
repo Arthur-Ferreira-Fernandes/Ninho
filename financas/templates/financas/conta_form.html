@@ -104,6 +104,15 @@
       </div>
     </fieldset>
 
+    <fieldset class="secao" id="reserva">
+      <legend>Alerta de saldo baixo</legend>
+      <p class="ajuda-secao">Para saber que o dinheiro está acabando <strong>antes</strong> de a conta ficar negativa.</p>
+      {% with field=form.reserva_minima %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      <div class="faixas-exemplo" aria-hidden="true">
+        <span class="c-n3">negativo</span><span class="c-n2">acabando</span><span class="c-n1">atenção</span><span class="c-p2">confortável</span>
+      </div>
+    </fieldset>
+
     <fieldset class="secao" id="guardar">
       <legend>Guardar todo mês</legend>
       <p class="ajuda-secao">Separe um valor para guardar. Ele entra como uma conta recorrente e sai da conta todo mês no <strong>dia de maior saldo</strong> daquele mês.</p>

@@ -6,6 +6,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
+from .templatetags.dinheiro import brl
 from .models import Aporte, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, UsoDiario
 
 DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
@@ -21,7 +22,7 @@ class ContaForm(forms.ModelForm):
         model = Conta
         fields = ["nome", "saldo_inicial", "data_inicio",
                   "modo_gasto", "percentual_gasto", "gasto_mensal",
-                  "guardar_modo", "guardar_percentual", "guardar_valor"]
+                  "guardar_modo", "guardar_percentual", "guardar_valor", "reserva_minima"]
         labels = {
             "nome": "Nome da conta",
             "saldo_inicial": "Saldo atual",
@@ -32,6 +33,7 @@ class ContaForm(forms.ModelForm):
             "guardar_modo": "Quanto guardar por mês",
             "guardar_percentual": "Porcentagem do salário",
             "guardar_valor": "Valor por mês",
+            "reserva_minima": "Reserva mínima",
         }
         help_texts = {
             "saldo_inicial": "Quanto tem na conta agora, no início desse dia.",
@@ -51,12 +53,25 @@ class ContaForm(forms.ModelForm):
             "guardar_percentual": forms.NumberInput(attrs={"step": "0.5", "min": "0", "max": "100",
                                                            "inputmode": "decimal", "placeholder": "Ex.: 10"}),
             "guardar_valor": _dinheiro("Ex.: 500,00"),
+            "reserva_minima": _dinheiro("Automática"),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["gasto_mensal"].required = False
         self.fields["guardar_modo"].required = False
+        padrao = (self.instance.orcamento_mensal * Conta.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
+        texto_padrao = f"{Conta.DIAS_RESERVA_PADRAO} dias de dinheiro do dia a dia"
+        if padrao:
+            texto_padrao += f" (hoje, {brl(padrao)})"
+        self.fields["reserva_minima"].help_text = (
+            f"Abaixo deste saldo as cores ficam amarelo/laranja e o painel avisa. Vazio: {texto_padrao}.")
+
+    def clean_reserva_minima(self):
+        valor = self.cleaned_data.get("reserva_minima")
+        if valor is not None and valor < 0:
+            raise forms.ValidationError("A reserva não pode ser negativa.")
+        return valor
 
     def clean(self):
         dados = super().clean()

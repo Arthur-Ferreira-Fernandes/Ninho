@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (aplicar_escala, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (alerta_saldo, aplicar_escala, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (AporteForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -461,7 +461,7 @@ def painel(request, pk):
             selecionado = primeiro
 
     dias = extrato_mes(conta, primeiro.year, primeiro.month)
-    legenda = aplicar_escala(dias)
+    legenda = aplicar_escala(dias, conta)
     # calendário do mapa: semanas de segunda a domingo
     vazios_inicio = range(primeiro.weekday())
     dia = dias[selecionado.day - 1]
@@ -487,6 +487,7 @@ def painel(request, pk):
         "hoje": hoje,
         "dias": dias,
         "legenda": legenda,
+        "alerta": alerta_saldo(conta, hoje),
         "vazios_inicio": vazios_inicio,
         "resumo_mes": _resumo_mes(ativos, hoje),
         "pode_voltar": primeiro > conta.data_inicio.replace(day=1),
@@ -822,6 +823,7 @@ def _projecao_sem_compra(conta, compra):
         "inicio": inicio.isoformat(),
         "centavos": [int(v * 100) for v in valores],
         "salario": float(conta.salario),
+        "reserva": float(conta.reserva),
         "meses": MESES_PROJECAO,
         "faturas": totais_faturas,
     }

@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .calculos import Dia, aplicar_escala, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
+from .calculos import Dia, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
 from .models import (Aporte, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro,
                      PedidoEntrada, UsoDiario)
 
@@ -578,35 +578,67 @@ class LancamentoFormTests(TestCase):
 
 
 class EscalaCoresTests(TestCase):
-    def dias(self, *valores):
-        return [Dia(date(2026, 1, i + 1), v is not None, esperado=None if v is None else Decimal(v))
-                for i, v in enumerate(valores)]
+    """Escala com a reserva mínima como virada: vermelho < 0 ≤ laranja/amarelo < reserva ≤ verdes."""
 
-    def test_niveis_divergentes_com_escala_comum(self):
-        dias = self.dias(None, "1000", "500", "250", "10", "0", "-250", "-1000")
-        legenda = aplicar_escala(dias)
-        self.assertEqual([d.cor for d in dias], ["", "p4", "p2", "p1", "z", "z", "n1", "n4"])
-        self.assertEqual(legenda["maximo"], Decimal("1000"))
-        self.assertEqual([p["ate"] for p in legenda["positivos"]], [250, 500, 750, 1000])
-        self.assertTrue(legenda["tem_negativo"])
+    def test_limites_das_faixas(self):
+        reserva, ref = Decimal("500"), Decimal("4000")   # verdes em faixas de 1000 acima da reserva
+        casos = {"-600": "n4", "-500": "n4", "-100": "n3", "0": "n2", "249": "n2", "250": "n1", "499.99": "n1",
+                 "500": "p1", "1499": "p1", "1500": "p2", "2500": "p3", "3500": "p4", "99999": "p4"}
+        for valor, esperado in casos.items():
+            self.assertEqual(nivel_cor(Decimal(valor), reserva, ref), esperado, valor)
 
-    def test_mes_todo_zerado(self):
-        dias = self.dias("0", "0")
-        aplicar_escala(dias)
-        self.assertEqual([d.cor for d in dias], ["z", "z"])
+    def test_sem_reserva(self):
+        self.assertEqual(nivel_cor(Decimal("0"), Decimal("0"), Decimal("4000")), "p1")
+        self.assertEqual(nivel_cor(Decimal("-10"), Decimal("0"), Decimal("4000")), "n3")
+        self.assertEqual(nivel_cor(Decimal("-1000"), Decimal("0"), Decimal("4000")), "n4")
 
-    def test_painel_mostra_mapa_e_cores(self):
+    def test_reserva_padrao_e_personalizada(self):
+        conta = Conta(gasto_mensal=Decimal("1500"), modo_gasto=Conta.MENSAL)
+        self.assertEqual(conta.reserva, Decimal("500"))          # 10 dias de dia a dia
+        conta.reserva_minima = Decimal("800")
+        self.assertEqual(conta.reserva, Decimal("800"))
+
+    def test_painel_mostra_mapa_cores_e_alerta(self):
         cadastrar(self.client)
         familia = User.objects.get(username="arthur").membro.familia
-        conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
-                                     data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("3100"))
-        r = self.client.get(reverse("financas:painel", args=[conta.pk]) + "?mes=2026-01")
+        hoje = date.today()
+        # 3000/mês de dia a dia (100/dia), reserva padrão 1000; começa hoje com 1500
+        conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1500"),
+                                     data_inicio=hoje, gasto_mensal=Decimal("3000"))
+        r = self.client.get(reverse("financas:painel", args=[conta.pk]))
         self.assertContains(r, "Mapa do mês")
-        cores = [d.cor for d in r.context["dias"]]
-        # escala comum: o maior valor absoluto é o -2100 do último dia (1000 - 3100)
-        self.assertEqual(cores[-1], "n4")
-        self.assertEqual(cores[0], "p2")      # 900 é 43% de 2100
+        self.assertContains(r, "Acabando")
+        dia = r.context["dia"]
+        self.assertEqual(dia.cor, nivel_cor(dia.esperado, conta.reserva, r.context["legenda"]["referencia"]))
+        alerta = r.context["alerta"]
+        serie = serie_diaria(conta, hoje, hoje + timedelta(days=60))
+        primeiro_abaixo = next(i for i, v in enumerate(serie) if v < Decimal("1000"))
+        primeiro_neg = next(i for i, v in enumerate(serie) if v < 0)
+        self.assertEqual(alerta["abaixo_em"], hoje + timedelta(days=primeiro_abaixo))
+        self.assertEqual(alerta["negativo_em"], hoje + timedelta(days=primeiro_neg))
+        self.assertLess(alerta["abaixo_em"], alerta["negativo_em"])   # avisa antes de ficar negativo
+        self.assertContains(r, "abaixo da reserva")
 
+    def test_sem_alerta_quando_folgado(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("50000"),
+                                     data_inicio=date.today(), gasto_mensal=Decimal("300"))
+        self.assertIsNone(self.client.get(reverse("financas:painel", args=[conta.pk])).context["alerta"])
+
+    def test_reserva_no_formulario(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("0"),
+                                     data_inicio=date(2026, 1, 1), modo_gasto=Conta.MENSAL, gasto_mensal=Decimal("1500"))
+        url = reverse("financas:conta_editar", args=[conta.pk])
+        dados = campos(self.client.get(url), "form-conta")
+        self.assertEqual(dados["reserva_minima"], "")
+        self.assertContains(self.client.get(url), "10 dias de dinheiro do dia a dia (hoje, R$ 500,00)")
+        self.client.post(url, {**dados, "reserva_minima": "1200"})
+        self.assertEqual(Conta.objects.get(pk=conta.pk).reserva, Decimal("1200"))
+        r = self.client.post(url, {**dados, "reserva_minima": "-5"})
+        self.assertContains(r, "não pode ser negativa")
 
 class NavegacaoMapaTests(TestCase):
     def setUp(self):

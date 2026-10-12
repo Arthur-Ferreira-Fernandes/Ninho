@@ -110,8 +110,22 @@ class Conta(models.Model):
     guardar_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     guardar_valor = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
+    # Abaixo desta reserva o saldo é "acabando" (aviso e cores amarelo/laranja).
+    reserva_minima = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Vazio: 10 dias de dinheiro do dia a dia.",
+    )
+    DIAS_RESERVA_PADRAO = 10
+
     def __str__(self):
         return self.nome
+
+    @property
+    def reserva(self):
+        """Saldo mínimo confortável: o definido, ou 10 dias de dinheiro do dia a dia."""
+        if self.reserva_minima is not None:
+            return self.reserva_minima
+        return (self.orcamento_mensal * self.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
 
     @property
     def guardar_mensal(self):
@@ -171,6 +185,34 @@ class ContaFixa(models.Model):
         help_text="O valor muda todo mês (luz, água, mercado): o valor vira uma estimativa "
                   "e cada mês é marcado como pago com o valor real.",
     )
+
+    # Frequência: todo mês num dia fixo, ou a cada N dias (produtos do carro a cada 45 dias...).
+    MENSAL = "mensal"
+    DIAS = "dias"
+    FREQUENCIAS = [(MENSAL, "Todo mês"), (DIAS, "A cada X dias")]
+    frequencia = models.CharField(max_length=6, choices=FREQUENCIAS, default=MENSAL)
+    intervalo_dias = models.PositiveSmallIntegerField(null=True, blank=True)
+    proxima = models.DateField(
+        null=True, blank=True,
+        help_text="A cada X dias: data prevista da próxima vez. Depois de cada compra marcada, "
+                  "a contagem recomeça da data real.",
+    )
+
+    @property
+    def periodica(self):
+        return self.frequencia == self.DIAS
+
+    @property
+    def marcavel(self):
+        """Pode ser marcada como paga/comprada com o valor real."""
+        return self.variavel or self.periodica
+
+    @property
+    def valor_mensal(self):
+        """Quanto pesa por mês: o valor, ou o equivalente de 30 dias se for a cada X dias."""
+        if self.periodica and self.intervalo_dias:
+            return (self.valor * 30 / self.intervalo_dias).quantize(Decimal("0.01"))
+        return self.valor
 
     class Meta:
         ordering = ["dia", "nome"]

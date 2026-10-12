@@ -14,6 +14,19 @@
   </div>
 </div>
 
+{% if alerta %}
+<div class="alerta-saldo {% if alerta.negativo_em %}perigo{% else %}atencao{% endif %}" role="status">
+  <span class="alerta-icone" aria-hidden="true">!</span>
+  <div>
+    {% if alerta.ja_esta %}<strong>O saldo já está abaixo da reserva de {{ alerta.reserva|brl }}.</strong>
+    {% else %}<strong>A partir de <a href="?mes={{ alerta.abaixo_em|date:'Y-m' }}&dia={{ alerta.abaixo_em|date:'Y-m-d' }}#extrato">{{ alerta.abaixo_em|date:"d/m" }}</a> o saldo fica abaixo da reserva de {{ alerta.reserva|brl }}.</strong>{% endif %}
+    {% if alerta.ja_negativa %}A conta <strong>já está negativa</strong>.
+    {% elif alerta.negativo_em %}A conta fica <strong>negativa em <a href="?mes={{ alerta.negativo_em|date:'Y-m' }}&dia={{ alerta.negativo_em|date:'Y-m-d' }}#extrato">{{ alerta.negativo_em|date:"d/m" }}</a></strong>.{% endif %}
+    Pior momento nos próximos 60 dias: {{ alerta.pior_valor|brl }} em <a href="?mes={{ alerta.pior_em|date:'Y-m' }}&dia={{ alerta.pior_em|date:'Y-m-d' }}#extrato">{{ alerta.pior_em|date:"d/m" }}</a>.
+  </div>
+</div>
+{% endif %}
+
 <div class="kpis">
   <div class="kpi">
     <span class="rotulo">Deveria ter ao fim de {% if dia.data == hoje %}hoje{% else %}{{ dia.data|date:"d/m" }}{% endif %}</span>
@@ -177,15 +190,17 @@
       {% endfor %}
     </div>
     <div class="legenda" aria-label="Legenda das cores">
-      <div class="legenda-faixa">
-        {% for n in legenda.negativos %}<span class="c-{{ n.cor }}" title="até {{ n.ate|brl }}"></span>{% endfor %}
-        <span class="c-z" title="perto de zero"></span>
-        {% for p in legenda.positivos %}<span class="c-{{ p.cor }}" title="até {{ p.ate|brl }}"></span>{% endfor %}
+      <div class="legenda-faixa tres">
+        <div title="negativo"><span class="c-n4"></span><span class="c-n3"></span></div>
+        <div title="abaixo da reserva de {{ legenda.reserva|brl }}"><span class="c-n2"></span><span class="c-n1"></span></div>
+        <div title="acima da reserva"><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
       </div>
-      <div class="legenda-rotulos">
-        <span>−{{ legenda.maximo|brl }}</span><span>R$ 0</span><span>{{ legenda.maximo|brl }}</span>
+      <div class="legenda-grupos">
+        <span><b>Negativo</b>&lt; R$ 0</span>
+        <span><b>Acabando</b>&lt; {{ legenda.reserva|brl }}</span>
+        <span><b>Confortável</b>escuro ≥ {{ legenda.verde_forte|brl }}</span>
       </div>
-      <p class="legenda-nota">Laranja: saldo negativo · verde: positivo · cinza: perto de zero. Contorno tracejado = previsão.</p>
+      <p class="legenda-nota">Reserva mínima: {{ legenda.reserva|brl }} (<a href="{% url 'financas:conta_editar' conta.pk %}#reserva">alterar</a>). Contorno tracejado = previsão.</p>
     </div>
 
     {% if resumo_mes %}
