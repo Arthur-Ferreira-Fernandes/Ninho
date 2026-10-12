@@ -22,7 +22,8 @@ class ContaForm(forms.ModelForm):
         model = Conta
         fields = ["nome", "saldo_inicial", "data_inicio",
                   "modo_gasto", "percentual_gasto", "gasto_mensal",
-                  "guardar_modo", "guardar_percentual", "guardar_valor", "reserva_minima"]
+                  "guardar_modo", "guardar_percentual", "guardar_valor",
+                  "reserva_modo", "reserva_minima", "reserva_percentual"]
         labels = {
             "nome": "Nome da conta",
             "saldo_inicial": "Saldo atual",
@@ -33,7 +34,9 @@ class ContaForm(forms.ModelForm):
             "guardar_modo": "Quanto guardar por mês",
             "guardar_percentual": "Porcentagem do salário",
             "guardar_valor": "Valor por mês",
-            "reserva_minima": "Reserva mínima",
+            "reserva_modo": "Como definir a reserva",
+            "reserva_minima": "Valor da reserva",
+            "reserva_percentual": "Porcentagem do salário",
         }
         help_texts = {
             "saldo_inicial": "Quanto tem na conta agora, no início desse dia.",
@@ -53,25 +56,18 @@ class ContaForm(forms.ModelForm):
             "guardar_percentual": forms.NumberInput(attrs={"step": "0.5", "min": "0", "max": "100",
                                                            "inputmode": "decimal", "placeholder": "Ex.: 10"}),
             "guardar_valor": _dinheiro("Ex.: 500,00"),
-            "reserva_minima": _dinheiro("Automática"),
+            "reserva_modo": forms.RadioSelect,
+            "reserva_minima": _dinheiro("Ex.: 800,00"),
+            "reserva_percentual": forms.NumberInput(attrs={"step": "0.5", "min": "0", "max": "100",
+                                                           "inputmode": "decimal", "placeholder": "Ex.: 15"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["gasto_mensal"].required = False
         self.fields["guardar_modo"].required = False
-        padrao = (self.instance.orcamento_mensal * Conta.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
-        texto_padrao = f"{Conta.DIAS_RESERVA_PADRAO} dias de dinheiro do dia a dia"
-        if padrao:
-            texto_padrao += f" (hoje, {brl(padrao)})"
-        self.fields["reserva_minima"].help_text = (
-            f"Abaixo deste saldo as cores ficam amarelo/laranja e o painel avisa. Vazio: {texto_padrao}.")
+        self.fields["reserva_modo"].required = False
 
-    def clean_reserva_minima(self):
-        valor = self.cleaned_data.get("reserva_minima")
-        if valor is not None and valor < 0:
-            raise forms.ValidationError("A reserva não pode ser negativa.")
-        return valor
 
     def clean(self):
         dados = super().clean()
@@ -103,6 +99,25 @@ class ContaForm(forms.ModelForm):
         else:
             dados["guardar_modo"] = Conta.GUARDAR_NADA
             dados["guardar_percentual"] = dados["guardar_valor"] = None
+
+        reserva = dados.get("reserva_modo")
+        if reserva == Conta.RESERVA_FIXO:
+            valor = dados.get("reserva_minima")
+            if valor is None:
+                self.add_error("reserva_minima", "Informe o valor da reserva.")
+            elif valor < 0:
+                self.add_error("reserva_minima", "A reserva não pode ser negativa.")
+            dados["reserva_percentual"] = None
+        elif reserva == Conta.RESERVA_PERCENTUAL:
+            pct = dados.get("reserva_percentual")
+            if pct is None:
+                self.add_error("reserva_percentual", "Informe a porcentagem do salário.")
+            elif not 0 < pct <= 100:
+                self.add_error("reserva_percentual", "Use um valor entre 0 e 100.")
+            dados["reserva_minima"] = None
+        else:
+            dados["reserva_modo"] = Conta.RESERVA_AUTO
+            dados["reserva_minima"] = dados["reserva_percentual"] = None
         return dados
 
 

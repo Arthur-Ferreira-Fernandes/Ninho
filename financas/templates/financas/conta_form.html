@@ -106,10 +106,43 @@
 
     <fieldset class="secao" id="reserva">
       <legend>Alerta de saldo baixo</legend>
-      <p class="ajuda-secao">Para saber que o dinheiro está acabando <strong>antes</strong> de a conta ficar negativa.</p>
-      {% with field=form.reserva_minima %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
-      <div class="faixas-exemplo" aria-hidden="true">
-        <span class="c-n3">negativo</span><span class="c-n2">acabando</span><span class="c-n1">atenção</span><span class="c-p2">confortável</span>
+      <p class="ajuda-secao">Para saber que o dinheiro está acabando <strong>antes</strong> de a conta ficar negativa. Abaixo da reserva o mapa fica amarelo/laranja; abaixo de ¼ dela começa o vermelho.</p>
+
+      <div class="modos modos-3" role="radiogroup" aria-label="{{ form.reserva_modo.label }}">
+        {% for radio in form.reserva_modo %}
+        <label class="modo">
+          {{ radio.tag }}
+          <span class="modo-corpo">
+            {% if radio.data.value == "auto" %}<span class="modo-icone">A</span><strong>Automática</strong><small>10 dias de dinheiro do dia a dia</small>
+            {% elif radio.data.value == "fixo" %}<span class="modo-icone">R$</span><strong>Valor fixo</strong><small>Ex.: R$ 800</small>
+            {% else %}<span class="modo-icone">%</span><strong>% do salário</strong><small>Ex.: 15% do que entra</small>{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="painel-reserva" data-reserva="fixo">
+        {% with field=form.reserva_minima %}{% include "financas/_campo.html" with prefixo="R$" obrigatorio=True %}{% endwith %}
+      </div>
+      <div class="painel-reserva" data-reserva="percentual">
+        {% with field=form.reserva_percentual %}{% include "financas/_campo.html" with sufixo="%" obrigatorio=True %}{% endwith %}
+        <div class="atalhos">
+          <button type="button" data-reserva-pct="5">5%</button>
+          <button type="button" data-reserva-pct="10">10%</button>
+          <button type="button" data-reserva-pct="15">15%</button>
+          <button type="button" data-reserva-pct="20">20%</button>
+          <button type="button" data-reserva-pct="30">30%</button>
+        </div>
+      </div>
+
+      <div class="reserva-previa" aria-live="polite">
+        <div class="reserva-valor">Reserva: <b id="reserva-valor">—</b></div>
+        <div class="faixas-exemplo">
+          <span class="c-n4">negativo<small>&lt; R$ 0</small></span>
+          <span class="c-n3">quase<small id="rf-quase">—</small></span>
+          <span class="c-n2">laranja<small id="rf-metade">—</small></span>
+          <span class="c-n1">atenção<small id="rf-reserva">—</small></span>
+          <span class="c-p2">confortável<small id="rf-ok">—</small></span>
+        </div>
       </div>
     </fieldset>
 
@@ -214,7 +247,9 @@
     const g = marcado ? marcado.value : "nada";
     form.querySelectorAll(".painel-guardar").forEach((p) => { p.hidden = p.dataset.guardar !== g; });
     const pctG = num($("[name=guardar_percentual]"));
-    form.querySelectorAll("[data-guardar-pct]").forEach((b) => b.classList.toggle("ativo", pctG === +b.dataset.guardarPct));
+    form.querySelectorAll("[data-reserva-pct]").forEach((b) =>
+    b.addEventListener("click", () => { $("[name=reserva_percentual]").value = b.dataset.reservaPct; atualizar(); }));
+  form.querySelectorAll("[data-guardar-pct]").forEach((b) => b.classList.toggle("ativo", pctG === +b.dataset.guardarPct));
     const salario = totalSalario();
     let valor = 0, nota = "";
     if (g === "percentual") {
@@ -234,6 +269,25 @@
     }
   }
 
+  function atualizarReserva(valorMesDiaADia) {
+    const marcado = form.querySelector("[name=reserva_modo]:checked");
+    const r = marcado ? marcado.value : "auto";
+    form.querySelectorAll(".painel-reserva").forEach((p) => { p.hidden = p.dataset.reserva !== r; });
+    const pctR = num($("[name=reserva_percentual]"));
+    form.querySelectorAll("[data-reserva-pct]").forEach((b) => b.classList.toggle("ativo", pctR === +b.dataset.reservaPct));
+    let reserva = 0;
+    if (r === "fixo") reserva = num($("[name=reserva_minima]"));
+    else if (r === "percentual") reserva = totalSalario() * pctR / 100;
+    else reserva = Math.round(valorMesDiaADia * 10 / 30);
+    const fmt = (v) => brl.format(Math.round(v * 100) / 100);
+    document.getElementById("reserva-valor").textContent = reserva > 0 ? fmt(reserva) +
+      (r === "auto" ? " (10 dias de dia a dia)" : r === "percentual" ? " (" + pctR + "% do salário)" : "") : "—";
+    document.getElementById("rf-quase").textContent = reserva > 0 ? "< " + fmt(reserva / 4) : "—";
+    document.getElementById("rf-metade").textContent = reserva > 0 ? "< " + fmt(reserva / 2) : "—";
+    document.getElementById("rf-reserva").textContent = reserva > 0 ? "< " + fmt(reserva) : "—";
+    document.getElementById("rf-ok").textContent = reserva > 0 ? "≥ " + fmt(reserva) : "—";
+  }
+
   function atualizar() {
     atualizarGuardar();
     const m = modo();
@@ -251,6 +305,7 @@
 
     if (m === "percentual") valorMes = salario * num(pct) / 100;
     else if (m === "mensal") valorMes = num(mensal);
+    atualizarReserva(valorMes);
 
     const previa = document.getElementById("previa");
     previa.classList.toggle("cheia", valorMes > 0);
@@ -273,6 +328,8 @@
   slider.addEventListener("input", () => { pct.value = slider.value; atualizar(); });
   form.querySelectorAll("[data-pct]").forEach((b) =>
     b.addEventListener("click", () => { pct.value = b.dataset.pct; atualizar(); }));
+  form.querySelectorAll("[data-reserva-pct]").forEach((b) =>
+    b.addEventListener("click", () => { $("[name=reserva_percentual]").value = b.dataset.reservaPct; atualizar(); }));
   form.querySelectorAll("[data-guardar-pct]").forEach((b) =>
     b.addEventListener("click", () => { $("[name=guardar_percentual]").value = b.dataset.guardarPct; atualizar(); }));
   form.addEventListener("input", atualizar);

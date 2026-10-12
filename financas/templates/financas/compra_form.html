@@ -108,14 +108,16 @@
           <div class="mapa" id="mi-dias"></div>
           <div class="mi-foco" id="mi-foco" aria-live="polite"></div>
           <div class="legenda" aria-label="Legenda das cores">
-            <div class="legenda-faixa tres">
-              <div><span class="c-n4"></span><span class="c-n3"></span></div>
+            <div class="legenda-faixa quatro">
+              <div><span class="c-n5"></span><span class="c-n4"></span></div>
+              <div><span class="c-n3"></span></div>
               <div><span class="c-n2"></span><span class="c-n1"></span></div>
               <div><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
             </div>
-            <div class="legenda-grupos">
+            <div class="legenda-grupos quatro">
               <span><b>Negativo</b>&lt; R$ 0</span>
-              <span><b>Acabando</b>&lt; <span id="mi-reserva">—</span></span>
+              <span><b>Quase</b>&lt; <span id="mi-quase">—</span></span>
+              <span><b>Atenção</b>&lt; <span id="mi-reserva">—</span></span>
               <span><b>Confortável</b>escuro ≥ <span id="mi-forte">—</span></span>
             </div>
             <p class="legenda-nota"><span class="mi-marca-parcela"></span> vence parcela ·
@@ -223,15 +225,18 @@
   }
 
   // ---------- mapa de datas ----------
-  // mesma escala do painel (financas/calculos.py: nivel_cor): vermelho abaixo de zero,
-  // laranja/amarelo abaixo da reserva mínima, verdes acima dela até reserva + referência
+  // mesma escala do painel (financas/calculos.py: nivel_cor): verdes acima da reserva,
+  // amarelo/laranja abaixo dela, vermelho a partir de ¼ da reserva, mais escuro no negativo
   const RESERVA = Math.round((PROJ.reserva || 0) * 100);
   function nivelCor(v, ref) {
     if (v < 0) {
-      const limite = RESERVA > 0 ? RESERVA : ref / 4;
-      return limite > 0 && v <= -limite ? "n4" : "n3";
+      const limite = RESERVA > 0 ? RESERVA / 2 : ref / 8;
+      return limite > 0 && v <= -limite ? "n5" : "n4";
     }
-    if (v < RESERVA) return v < RESERVA / 2 ? "n2" : "n1";
+    if (v < RESERVA) {
+      if (v < RESERVA / 4) return "n3";     // quase acabando: o vermelho começa aqui
+      return v < RESERVA / 2 ? "n2" : "n1";
+    }
     if (ref <= 0) return "p4";
     return "p" + Math.min(4, 1 + Math.floor((v - RESERVA) / (ref / 4)));
   }
@@ -328,6 +333,7 @@
     });
     estado = { com, ref, porDia, n };
     el("mi-reserva").textContent = reais(RESERVA);
+    el("mi-quase").textContent = reais(Math.round(RESERVA / 4));
     el("mi-forte").textContent = reais(RESERVA + ref * 3 / 4);
 
     // faixa dos meses: cor do saldo no fim de cada mês

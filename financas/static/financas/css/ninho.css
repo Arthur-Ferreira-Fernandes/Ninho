@@ -671,17 +671,19 @@ tr.inativa td { opacity: .5; }
 
 /* ==========================================================================
    Escala de cores do saldo, com a reserva mínima como ponto de virada:
-   vermelhos (negativo) · laranja/amarelo (abaixo da reserva) · verdes (acima dela).
+   verdes (acima da reserva) · amarelo/laranja (atenção) · vermelho claro (quase acabando,
+   abaixo de ¼ da reserva) · vermelho e vermelho escuro (negativo).
    Luminosidade monotônica nos dois braços; texto com contraste ≥ 4,5:1.
    ========================================================================== */
 :root {
-  /* abaixo da reserva: amarelo → laranja (acabando) → vermelho (negativo) */
-  --n4: #8f1d1d; --n3: #cf3b2e; --n2: #f08a3c; --n1: #fcd581;
+  /* abaixo da reserva: amarelo → laranja → vermelho claro (quase acabando) → vermelho → vermelho escuro */
+  --n1: #fcd581; --n2: #f5a04a; --n3: #e8604a; --n4: #c22d29; --n5: #7f1717;
   --z:  #eceeed;
   --p1: #d6efe8; --p2: #9fd6c8; --p3: #4fa894; --p4: #126a5c;
 }
+.c-n5 { background: var(--n5); color: #fff; }
 .c-n4 { background: var(--n4); color: #fff; }
-.c-n3 { background: var(--n3); color: #fff; }
+.c-n3 { background: var(--n3); color: var(--txt); }
 .c-n2 { background: var(--n2); color: var(--txt); }
 .c-n1 { background: var(--n1); color: var(--txt); }
 .c-z  { background: var(--z);  color: var(--txt); }
@@ -1052,7 +1054,7 @@ form.inline { display: inline; margin-left: 6px; }
 .alerta-saldo.perigo { background: #fde8e6; color: #7c1d16; }
 .alerta-saldo.perigo .alerta-icone { background: var(--n3); color: #fff; }
 .alerta-saldo a { color: inherit; font-weight: 700; }
-.faixas-exemplo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: -4px; }
+.faixas-exemplo { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-top: 4px; }
 .faixas-exemplo span { text-align: center; font-size: .72rem; font-weight: 700; padding: 5px 0; }
 .faixas-exemplo span:first-child { border-radius: 6px 0 0 6px; }
 .faixas-exemplo span:last-child { border-radius: 0 6px 6px 0; }
@@ -1066,3 +1068,18 @@ form.inline { display: inline; margin-left: 6px; }
 .ultima-vez small { color: var(--pos); font-size: .78rem; font-weight: 600; }
 .ultima-vez small:empty { display: none; }
 .etiqueta-periodica { background: #e0ecfb; color: #1f4f8a; }
+
+/* legenda em quatro grupos */
+.legenda-faixa.quatro, .legenda-grupos.quatro { grid-template-columns: 2fr 1fr 2fr 4fr; }
+.legenda-faixa.quatro { display: grid; gap: 6px; }
+.legenda-faixa.quatro > div { display: grid; grid-auto-flow: column; gap: 2px; }
+.legenda-faixa.quatro span { height: 10px; }
+.legenda-faixa.quatro > div span:first-child { border-radius: 99px 0 0 99px; }
+.legenda-faixa.quatro > div span:last-child { border-radius: 0 99px 99px 0; }
+.legenda-faixa.quatro > div span:only-child { border-radius: 99px; }
+.painel-reserva[hidden] { display: none; }
+.reserva-previa { display: grid; gap: 8px; background: #f6f8f7; border-radius: var(--raio-sm); padding: 12px; }
+.reserva-valor { font-size: .9rem; }
+.reserva-valor b { font-size: 1.05rem; }
+.faixas-exemplo span { display: grid; gap: 1px; }
+.faixas-exemplo small { font-size: .66rem; font-weight: 600; opacity: .9; }

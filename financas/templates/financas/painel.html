@@ -15,11 +15,12 @@
 </div>
 
 {% if alerta %}
-<div class="alerta-saldo {% if alerta.negativo_em %}perigo{% else %}atencao{% endif %}" role="status">
+<div class="alerta-saldo {% if alerta.negativo_em or alerta.quase_em %}perigo{% else %}atencao{% endif %}" role="status">
   <span class="alerta-icone" aria-hidden="true">!</span>
   <div>
     {% if alerta.ja_esta %}<strong>O saldo já está abaixo da reserva de {{ alerta.reserva|brl }}.</strong>
     {% else %}<strong>A partir de <a href="?mes={{ alerta.abaixo_em|date:'Y-m' }}&dia={{ alerta.abaixo_em|date:'Y-m-d' }}#extrato">{{ alerta.abaixo_em|date:"d/m" }}</a> o saldo fica abaixo da reserva de {{ alerta.reserva|brl }}.</strong>{% endif %}
+    {% if alerta.quase_em and not alerta.ja_negativa %}{% if alerta.ja_quase %}Já está <strong>quase sem dinheiro</strong> (abaixo de {{ alerta.quase|brl }}).{% elif alerta.quase_em != alerta.negativo_em %}Fica <strong>quase sem dinheiro</strong> (abaixo de {{ alerta.quase|brl }}) em <a href="?mes={{ alerta.quase_em|date:'Y-m' }}&dia={{ alerta.quase_em|date:'Y-m-d' }}#extrato">{{ alerta.quase_em|date:"d/m" }}</a>.{% endif %}{% endif %}
     {% if alerta.ja_negativa %}A conta <strong>já está negativa</strong>.
     {% elif alerta.negativo_em %}A conta fica <strong>negativa em <a href="?mes={{ alerta.negativo_em|date:'Y-m' }}&dia={{ alerta.negativo_em|date:'Y-m-d' }}#extrato">{{ alerta.negativo_em|date:"d/m" }}</a></strong>.{% endif %}
     Pior momento nos próximos 60 dias: {{ alerta.pior_valor|brl }} em <a href="?mes={{ alerta.pior_em|date:'Y-m' }}&dia={{ alerta.pior_em|date:'Y-m-d' }}#extrato">{{ alerta.pior_em|date:"d/m" }}</a>.
@@ -190,14 +191,16 @@
       {% endfor %}
     </div>
     <div class="legenda" aria-label="Legenda das cores">
-      <div class="legenda-faixa tres">
-        <div title="negativo"><span class="c-n4"></span><span class="c-n3"></span></div>
-        <div title="abaixo da reserva de {{ legenda.reserva|brl }}"><span class="c-n2"></span><span class="c-n1"></span></div>
+      <div class="legenda-faixa quatro">
+        <div title="negativo"><span class="c-n5"></span><span class="c-n4"></span></div>
+        <div title="quase acabando: abaixo de {{ legenda.quase|brl }}"><span class="c-n3"></span></div>
+        <div title="atenção: abaixo da reserva de {{ legenda.reserva|brl }}"><span class="c-n2"></span><span class="c-n1"></span></div>
         <div title="acima da reserva"><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
       </div>
-      <div class="legenda-grupos">
+      <div class="legenda-grupos quatro">
         <span><b>Negativo</b>&lt; R$ 0</span>
-        <span><b>Acabando</b>&lt; {{ legenda.reserva|brl }}</span>
+        <span><b>Quase</b>&lt; {{ legenda.quase|brl }}</span>
+        <span><b>Atenção</b>&lt; {{ legenda.reserva|brl }}</span>
         <span><b>Confortável</b>escuro ≥ {{ legenda.verde_forte|brl }}</span>
       </div>
       <p class="legenda-nota">Reserva mínima: {{ legenda.reserva|brl }} (<a href="{% url 'financas:conta_editar' conta.pk %}#reserva">alterar</a>). Contorno tracejado = previsão.</p>
