@@ -1056,3 +1056,13 @@ form.inline { display: inline; margin-left: 6px; }
 .faixas-exemplo span { text-align: center; font-size: .72rem; font-weight: 700; padding: 5px 0; }
 .faixas-exemplo span:first-child { border-radius: 6px 0 0 6px; }
 .faixas-exemplo span:last-child { border-radius: 0 6px 6px 0; }
+
+/* contas a cada X dias */
+.bloco-periodico[hidden], #bloco-dia[hidden] { display: none; }
+#atalhos-intervalo { margin: -8px 0 16px; }
+.ultima-vez { display: grid; gap: 6px; margin: -6px 0 16px; padding: 10px 12px; background: #f6f8f7; border-radius: var(--raio-sm); }
+.ultima-vez label { font-size: .8rem; font-weight: 600; }
+.ultima-vez input { max-width: 200px; }
+.ultima-vez small { color: var(--pos); font-size: .78rem; font-weight: 600; }
+.ultima-vez small:empty { display: none; }
+.etiqueta-periodica { background: #e0ecfb; color: #1f4f8a; }

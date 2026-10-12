@@ -267,12 +267,12 @@
         {% else %}
         <div class="mov">
           <dt><a href="{% url 'financas:item_editar' m.origem m.objeto.pk %}">{{ m.nome }}</a>
-            <small>{% if m.origem == "fixa" %}{% if m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
-            {% if m.origem == "fixa" and m.objeto.variavel %}
+            <small>{% if m.origem == "fixa" %}{% if m.objeto.periodica %}a cada {{ m.objeto.intervalo_dias }} dias · {% if m.evento.pagamento %}{% if m.entrada %}recebido{% else %}feito{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (previsto {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}previsto{% endif %}{% elif m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
+            {% if m.origem == "fixa" and m.objeto.marcavel %}
               {% if m.evento.pagamento %}
               <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
                 <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                <span class="pago-selo">✓ {% if m.entrada %}recebida{% else %}paga{% endif %}</span>
+                <span class="pago-selo">✓ {% if m.entrada %}recebida{% elif m.objeto.periodica %}feito{% else %}paga{% endif %}</span>
                 <button type="submit" class="acao-item">Desfazer</button>
               </form>
               {% else %}
@@ -284,7 +284,7 @@
                          value="{{ m.valor|stringformat:'s' }}" aria-label="Valor {% if m.entrada %}recebido{% else %}pago{% endif %} de {{ m.nome }}">
                 </div>
                 <input type="date" name="data" value="{% if m.evento.vencimento > hoje %}{{ hoje|date:'Y-m-d' }}{% else %}{{ m.evento.vencimento|date:'Y-m-d' }}{% endif %}" aria-label="Data do pagamento" required>
-                <button type="submit" class="btn">{% if m.entrada %}Recebi{% else %}Paguei{% endif %}</button>
+                <button type="submit" class="btn">{% if m.entrada %}Recebi{% elif m.objeto.periodica %}Comprei{% else %}Paguei{% endif %}</button>
               </form>
               {% endif %}
             {% endif %}
@@ -307,7 +307,7 @@
               </form>
             </span>
             {% endif %}</dt>
-          <dd class="{% if m.entrada %}pos{% else %}neg{% endif %}">{% if m.evento.estimado %}≈ {% endif %}{% if m.entrada %}+{% else %}−{% endif %} {{ m.valor|brl }}</dd>
+          <dd class="{% if m.entrada %}pos{% else %}neg{% endif %}">{% if m.evento.estimado or m.objeto.periodica and not m.evento.pagamento %}≈ {% endif %}{% if m.entrada %}+{% else %}−{% endif %} {{ m.valor|brl }}</dd>
         </div>
         {% endif %}
         {% endfor %}
@@ -470,13 +470,20 @@
         </tr>
         {% for i in recorrentes %}
         <tr class="{% if i.inativa %}inativa{% endif %}">
-          <td class="dia-fixa">{{ i.dia }}</td>
+          <td class="dia-fixa">{% if i.obj.periodica %}<span title="A cada {{ i.obj.intervalo_dias }} dias">↻</span>{% else %}{{ i.dia }}{% endif %}</td>
           {% if i.tipo == "fixa" %}
           <td><a href="{% url 'financas:item_editar' 'fixa' i.obj.pk %}?voltar=contas">{{ i.nome }}</a>
             {% if i.obj.salario %}<span class="etiqueta">salário</span>{% endif %}
-            {% if i.obj.variavel %}<span class="etiqueta etiqueta-variavel" title="O valor muda todo mês; o valor mostrado é a estimativa">varia</span>{% endif %}
+            {% if i.obj.periodica %}<span class="etiqueta etiqueta-periodica">a cada {{ i.obj.intervalo_dias }} dias</span>
+            {% elif i.obj.variavel %}<span class="etiqueta etiqueta-variavel" title="O valor muda todo mês; o valor mostrado é a estimativa">varia</span>{% endif %}
             {% if i.inativa %}<span class="etiqueta neutra">pausada</span>{% endif %}
-            {% if i.obj.variavel and not i.inativa %}
+            {% if i.obj.periodica and not i.inativa %}
+              <small class="a-pagar">
+                {% if i.proxima_evento %}Próxima: {{ i.proxima_evento.data|date:"d/m/Y" }}{% if i.proxima_evento.data < hoje %} (atrasada){% endif %} ·
+                  <a href="?mes={{ i.proxima_evento.data|date:'Y-m' }}&dia={{ i.proxima_evento.data|date:'Y-m-d' }}#extrato">{% if i.receita %}Recebi{% else %}Comprei{% endif %} →</a>{% endif %}
+                {% if i.ultima_compra %}<span class="rotulo"> · última: {{ i.ultima_compra.valor|brl }} em {{ i.ultima_compra.data|date:"d/m" }}</span>{% endif %}
+              </small>
+            {% elif i.obj.variavel and not i.inativa %}
               {% if i.pagamento_mes %}
               <small class="pago-mes">✓ {{ hoje|date:"F"|lower }}: {% if i.receita %}recebido{% else %}pago{% endif %} {{ i.pagamento_mes.valor|brl }} em {{ i.pagamento_mes.data|date:"d/m" }}</small>
               {% else %}
@@ -489,7 +496,7 @@
             {% if i.inativa %}<span class="etiqueta neutra">cancelada em {{ i.obj.fim|date:"d/m/Y" }}</span>
             {% elif i.obj.inicio > hoje %}<span class="etiqueta neutra">começa {{ i.obj.inicio|date:"d/m" }}</span>{% endif %}</td>
           {% endif %}
-          <td class="num {% if i.receita %}pos{% else %}neg{% endif %}">{% if i.obj.variavel %}≈ {% endif %}{% if i.receita %}+{% else %}−{% endif %} {{ i.valor|brl }}</td>
+          <td class="num {% if i.receita %}pos{% else %}neg{% endif %}">{% if i.obj.variavel or i.obj.periodica %}≈ {% endif %}{% if i.receita %}+{% else %}−{% endif %} {{ i.valor|brl }}{% if i.obj.periodica %}<small class="rotulo por-mes">≈ {{ i.obj.valor_mensal|brl }}/mês</small>{% endif %}</td>
           <td class="num col-acoes"><div class="acoes-linha">
             {% if i.tipo == "fixa" %}
             <a class="btn fantasma" href="{% url 'financas:item_editar' 'fixa' i.obj.pk %}?voltar=contas">Editar</a>

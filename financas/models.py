@@ -110,22 +110,40 @@ class Conta(models.Model):
     guardar_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     guardar_valor = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
-    # Abaixo desta reserva o saldo é "acabando" (aviso e cores amarelo/laranja).
-    reserva_minima = models.DecimalField(
-        max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Vazio: 10 dias de dinheiro do dia a dia.",
-    )
+    # Reserva mínima: abaixo dela o saldo entra em atenção (amarelo → laranja) e,
+    # abaixo de 1/4 dela, em "quase acabando" (vermelho, que se intensifica até o negativo).
+    RESERVA_AUTO = "auto"
+    RESERVA_FIXO = "fixo"
+    RESERVA_PERCENTUAL = "percentual"
+    MODOS_RESERVA = [(RESERVA_AUTO, "Automática"), (RESERVA_FIXO, "Valor fixo"),
+                     (RESERVA_PERCENTUAL, "% do salário")]
     DIAS_RESERVA_PADRAO = 10
+    FRACAO_QUASE_ACABANDO = Decimal("0.25")
+
+    reserva_modo = models.CharField(max_length=10, choices=MODOS_RESERVA, default=RESERVA_AUTO)
+    reserva_minima = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    reserva_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.nome
 
     @property
-    def reserva(self):
-        """Saldo mínimo confortável: o definido, ou 10 dias de dinheiro do dia a dia."""
-        if self.reserva_minima is not None:
-            return self.reserva_minima
+    def reserva_automatica(self):
         return (self.orcamento_mensal * self.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
+
+    @property
+    def reserva(self):
+        """Saldo mínimo confortável, conforme o modo escolhido."""
+        if self.reserva_modo == self.RESERVA_FIXO and self.reserva_minima is not None:
+            return self.reserva_minima
+        if self.reserva_modo == self.RESERVA_PERCENTUAL and self.reserva_percentual:
+            return (self.salario * self.reserva_percentual / 100).quantize(Decimal("1"))
+        return self.reserva_automatica
+
+    @property
+    def quase_acabando(self):
+        """Abaixo disto começa o vermelho: 1/4 da reserva."""
+        return (self.reserva * self.FRACAO_QUASE_ACABANDO).quantize(Decimal("1"))
 
     @property
     def guardar_mensal(self):
@@ -209,9 +227,9 @@ class ContaFixa(models.Model):
 
     @property
     def valor_mensal(self):
-        """Quanto pesa por mês: o valor, ou o equivalente de 30 dias se for a cada X dias."""
+        """Quanto pesa por mês: o valor, ou a média mensal (365 dias ÷ 12) se for a cada X dias."""
         if self.periodica and self.intervalo_dias:
-            return (self.valor * 30 / self.intervalo_dias).quantize(Decimal("0.01"))
+            return (self.valor * 365 / (12 * self.intervalo_dias)).quantize(Decimal("0.01"))
         return self.valor
 
     class Meta:

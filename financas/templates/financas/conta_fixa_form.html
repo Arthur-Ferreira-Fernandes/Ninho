@@ -6,7 +6,7 @@
 <div class="fixa-layout">
   <form method="post" novalidate id="form-fixa" class="card fixa-card">{% csrf_token %}
     <h2 class="titulo-form">{% if item %}Editar conta fixa{% else %}Nova conta fixa{% endif %}</h2>
-    <p class="sub">Algo que se repete todo mês na conta <strong>{{ conta.nome }}</strong> e entra no cálculo do saldo esperado.</p>
+    <p class="sub">Algo que se repete (todo mês ou a cada X dias) na conta <strong>{{ conta.nome }}</strong> e entra no cálculo do saldo esperado.</p>
     {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
 
     {% if form.tipo %}
@@ -51,7 +51,44 @@
     </div>
     {% endif %}
 
-    <div class="campo{% if form.dia.errors %} com-erro{% endif %}">
+    {% if form.frequencia %}
+    <div class="campo">
+      <label>Com que frequência</label>
+      <div class="modos" role="radiogroup" aria-label="Frequência">
+        {% for radio in form.frequencia %}
+        <label class="modo">
+          {{ radio.tag }}
+          <span class="modo-corpo">
+            {% if radio.data.value == "mensal" %}<span class="modo-icone">31</span><strong>Todo mês</strong><small>Num dia fixo do mês</small>
+            {% else %}<span class="modo-icone">↻</span><strong>A cada X dias</strong><small>Ex.: produtos do carro a cada 45 dias</small>{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="bloco-periodico" id="bloco-periodico">
+      {% with field=form.intervalo_dias %}{% include "financas/_campo.html" with sufixo="dias" obrigatorio=True %}{% endwith %}
+      <div class="atalhos" id="atalhos-intervalo">
+        <button type="button" data-intervalo="7">1 semana</button>
+        <button type="button" data-intervalo="15">15 dias</button>
+        <button type="button" data-intervalo="30">30 dias</button>
+        <button type="button" data-intervalo="45">45 dias</button>
+        <button type="button" data-intervalo="60">2 meses</button>
+        <button type="button" data-intervalo="90">3 meses</button>
+        <button type="button" data-intervalo="180">6 meses</button>
+        <button type="button" data-intervalo="365">1 ano</button>
+      </div>
+      {% with field=form.proxima %}{% include "financas/_campo.html" with obrigatorio=True %}{% endwith %}
+      <div class="ultima-vez">
+        <label for="ultima-vez">Não sabe a próxima? Informe a última vez:</label>
+        <input type="date" id="ultima-vez">
+        <small id="ultima-vez-resultado"></small>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="campo{% if form.dia.errors %} com-erro{% endif %}" id="bloco-dia">
       <label>Dia do mês</label>
       <div class="dias" role="radiogroup" aria-label="Dia do mês">
         {% for radio in form.dia %}
@@ -90,7 +127,7 @@
       <dl class="resumo-lista">
         <div><dt>Próxima vez</dt><dd id="r-proxima">—</dd></div>
         <div><dt>Em 12 meses</dt><dd id="r-ano">—</dd></div>
-        <div><dt>Equivale por dia</dt><dd id="r-dia">—</dd></div>
+        <div><dt>Equivale por mês</dt><dd id="r-dia">—</dd></div>
       </dl>
     </div>
     {% if excluir %}
@@ -108,7 +145,8 @@
   const form = document.getElementById("form-fixa");
   const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
   const SUGESTOES = {
-    despesa: ["Aluguel", "Condomínio", "Luz", "Água", "Gás", "Mercado", "Internet", "Celular", "Plano de saúde", "Escola"],
+    despesa: ["Aluguel", "Condomínio", "Luz", "Água", "Gás", "Mercado", "Internet", "Celular", "Plano de saúde", "Escola",
+              "Produtos do carro", "Revisão do carro", "Ração", "Corte de cabelo"],
     receita: ["Aluguel recebido", "Pensão", "Freela fixo", "Rendimentos", "Mesada"],
   };
   const tipoFixo = {{ item.salario|yesno:"true,false" }} ? "receita" : null;
@@ -146,7 +184,29 @@
   const botaoMedia = form.querySelector("[data-media]");
   if (botaoMedia) botaoMedia.addEventListener("click", () => { valor.value = botaoMedia.dataset.media; atualizar(); });
 
+  const intervalo = form.querySelector("[name=intervalo_dias]");
+  const proximaCampo = form.querySelector("[name=proxima]");
+  const freq = () => (form.querySelector("[name=frequencia]:checked") || {}).value || "mensal";
+  const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  form.querySelectorAll("[data-intervalo]").forEach((b) =>
+    b.addEventListener("click", () => { intervalo.value = b.dataset.intervalo; calcularPelaUltima(); atualizar(); }));
+  const ultimaVez = document.getElementById("ultima-vez");
+  function calcularPelaUltima() {
+    if (!ultimaVez || !ultimaVez.value || !intervalo || !+intervalo.value) return;
+    const d = new Date(ultimaVez.value + "T12:00");
+    d.setDate(d.getDate() + +intervalo.value);
+    proximaCampo.value = iso(d);
+    document.getElementById("ultima-vez-resultado").textContent =
+      "Próxima vez: " + d.toLocaleDateString("pt-BR") + " (preenchida acima).";
+  }
+  if (ultimaVez) ultimaVez.addEventListener("change", () => { calcularPelaUltima(); atualizar(); });
+
   function atualizar() {
+    const periodica = freq() === "dias";
+    const blocoPer = document.getElementById("bloco-periodico");
+    if (blocoPer) blocoPer.hidden = !periodica;
+    document.getElementById("bloco-dia").hidden = periodica;
+    form.querySelectorAll("[data-intervalo]").forEach((b) => b.classList.toggle("ativo", intervalo && +intervalo.value === +b.dataset.intervalo));
     const ehVariavel = !!(variavel && variavel.checked);
     if (rotuloValor) rotuloValor.firstChild.textContent = ehVariavel ? "Valor estimado (por mês) " : "Valor ";
     const t = tipo(), d = dia();
@@ -156,13 +216,18 @@
     resumo.classList.toggle("receita", t === "receita");
     document.getElementById("r-icone").textContent = t === "receita" ? "↑" : "↓";
     document.getElementById("r-nome").textContent = nome.value.trim() || (t === "receita" ? "Nova receita" : "Nova despesa");
-    document.getElementById("r-quando").textContent = d ? "Todo dia " + d + " do mês" : "Escolha o dia do mês";
-    document.getElementById("r-valor").textContent = (ehVariavel ? "≈ " : "") + (t === "receita" ? "+ " : "− ") + brl.format(v);
-    const p = d ? proxima(d) : null;
+    const n = periodica && intervalo ? +intervalo.value : 0;
+    const vezesNoAno = periodica ? (n ? 365 / n : 0) : 12;
+    document.getElementById("r-quando").textContent = periodica
+      ? (n ? "A cada " + n + " dias" : "Informe o intervalo")
+      : (d ? "Todo dia " + d + " do mês" : "Escolha o dia do mês");
+    document.getElementById("r-valor").textContent = (ehVariavel || periodica ? "≈ " : "") + (t === "receita" ? "+ " : "− ") + brl.format(v);
+    const p = periodica ? (proximaCampo && proximaCampo.value ? new Date(proximaCampo.value + "T12:00") : null)
+                        : (d ? proxima(d) : null);
     document.getElementById("r-proxima").textContent = p
       ? p.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "long" }) : "—";
-    document.getElementById("r-ano").textContent = v ? brl.format(v * 12) : "—";
-    document.getElementById("r-dia").textContent = v ? brl.format(v * 12 / 365) : "—";
+    document.getElementById("r-ano").textContent = v && vezesNoAno ? brl.format(v * vezesNoAno) : "—";
+    document.getElementById("r-dia").textContent = v && vezesNoAno ? brl.format(v * vezesNoAno / 12) + "/mês" : "—";
     desenharSugestoes();
   }
 

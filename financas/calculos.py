@@ -70,8 +70,35 @@ def _fixas_ativas(conta):
     return conta.fixas.filter(ativa=True).prefetch_related("pagamentos")
 
 
+def _eventos_periodicos(fixa, inicio, fim):
+    """Conta a cada N dias: cadeia de ocorrências a partir de fixa.proxima.
+
+    As compras marcadas são ligadas às ocorrências na ordem das datas; depois de cada
+    uma, a próxima ocorrência conta a partir da data real (comprou atrasado → a
+    seguinte também atrasa).
+    """
+    intervalo = timedelta(days=fixa.intervalo_dias or 30)
+    pagos = sorted(fixa.pagamentos.all(), key=lambda p: (p.data, p.pk))
+    ocorrencia = fixa.proxima or fixa.conta.data_inicio
+    eventos, i = [], 0
+    while ocorrencia <= fim or i < len(pagos):
+        if i < len(pagos):
+            p = pagos[i]
+            i += 1
+            data, valor, seguinte = p.data, p.valor, p.data + intervalo
+        else:
+            p = None
+            data, valor, seguinte = ocorrencia, fixa.valor, ocorrencia + intervalo
+        if inicio <= data <= fim:
+            eventos.append(EventoFixa(fixa, data, valor, ocorrencia, p))
+        ocorrencia = seguinte
+    return eventos
+
+
 def eventos_fixa(fixa, inicio, fim):
     """Ocorrências da conta fixa que mexem na conta entre inicio e fim (inclusive)."""
+    if fixa.periodica:
+        return _eventos_periodicos(fixa, inicio, fim)
     if not fixa.variavel:
         return [EventoFixa(fixa, d, fixa.valor, d) for d in _ocorrencias(fixa, inicio, fim)]
     # o pagamento pode sair antes ou depois do vencimento: olha uma folga de 2 meses
@@ -312,20 +339,23 @@ def extrato_mes(conta, ano, mes):
 
 
 # Escala de cores do saldo, com a reserva mínima como ponto de virada:
-#   n4 vermelho escuro  ≤ −reserva
-#   n3 vermelho         negativo
-#   n2 laranja          de 0 até metade da reserva   ("acabando")
-#   n1 amarelo          da metade da reserva até ela  ("atenção")
-#   p1..p4 verdes       acima da reserva, em 4 faixas iguais até reserva + referência
+#   p1..p4 verdes          acima da reserva, em 4 faixas iguais até reserva + referência
+#   n1 amarelo             de ½ da reserva até a reserva        (atenção)
+#   n2 laranja             de ¼ até ½ da reserva
+#   n3 vermelho claro      de R$ 0 até ¼ da reserva              (quase acabando: o vermelho começa)
+#   n4 vermelho            de −½ reserva até R$ 0                 (negativo)
+#   n5 vermelho escuro     abaixo de −½ reserva
 # A referência dos verdes é o salário (ou, sem salário, o maior saldo do período).
 NIVEIS = 4
 
 
 def nivel_cor(valor, reserva, referencia):
     if valor < 0:
-        limite = reserva if reserva > 0 else referencia / NIVEIS
-        return "n4" if limite > 0 and valor <= -limite else "n3"
+        limite = reserva / 2 if reserva > 0 else referencia / 8
+        return "n5" if limite > 0 and valor <= -limite else "n4"
     if valor < reserva:
+        if valor < reserva / 4:
+            return "n3"
         return "n2" if valor < reserva / 2 else "n1"
     if referencia <= 0:
         return "p4"
@@ -345,8 +375,9 @@ def legenda_cores(reserva, referencia):
     return {
         "reserva": reserva,
         "referencia": referencia,
+        "metade": reserva / 2,
+        "quase": reserva / 4,
         "verde_forte": reserva + faixa * (NIVEIS - 1),
-        "limite_negativo": reserva if reserva > 0 else faixa,
     }
 
 
@@ -367,11 +398,15 @@ def alerta_saldo(conta, hoje, dias=60):
     abaixo = next((i for i, v in enumerate(serie) if v is not None and v < reserva), None)
     if abaixo is None:
         return None
+    quase = next((i for i, v in enumerate(serie) if v is not None and v < reserva / 4), None)
     negativo = next((i for i, v in enumerate(serie) if v is not None and v < 0), None)
     pior = min(range(len(serie)), key=lambda i: serie[i])
     return {
         "reserva": reserva,
         "abaixo_em": inicio + timedelta(days=abaixo),
+        "quase": (reserva / 4).quantize(Decimal("1")),
+        "quase_em": inicio + timedelta(days=quase) if quase is not None else None,
+        "ja_quase": quase == 0,
         "negativo_em": inicio + timedelta(days=negativo) if negativo is not None else None,
         "pior_em": inicio + timedelta(days=pior),
         "pior_valor": serie[pior],

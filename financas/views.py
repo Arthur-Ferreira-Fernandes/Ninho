@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (alerta_saldo, aplicar_escala, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (alerta_saldo, aplicar_escala, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (AporteForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -375,6 +375,16 @@ def _dia_a_dia_do_mes(conta, hoje):
     }
 
 
+def _situacao_periodica(fixa, hoje):
+    """Para contas a cada X dias: a próxima ocorrência ainda não marcada e a última marcada."""
+    intervalo = fixa.intervalo_dias or 30
+    eventos = eventos_fixa(fixa, hoje - timedelta(days=intervalo * 3), hoje + timedelta(days=intervalo * 3))
+    pendente = next((e for e in eventos if e.pagamento is None), None)
+    ultima = max(fixa.pagamentos.all(), key=lambda p: p.data, default=None)
+    return {"proxima_evento": pendente, "ultima_compra": ultima,
+            "dia": pendente.data.day if pendente else fixa.dia}
+
+
 def _situacao_do_mes(fixa, hoje):
     """Para contas variáveis: vencimento deste mês e o pagamento dele, se houver."""
     vencimento = date(hoje.year, hoje.month, min(fixa.dia, calendar.monthrange(hoje.year, hoje.month)[1]))
@@ -390,7 +400,8 @@ def _recorrentes(fixas, assinaturas, hoje):
     """
     itens = [{"tipo": "fixa", "obj": f, "dia": f.dia, "nome": f.nome, "valor": f.valor,
               "receita": f.tipo == ContaFixa.RECEITA, "inativa": not f.ativa,
-              **(_situacao_do_mes(f, hoje) if f.variavel else {})} for f in fixas]
+              **(_situacao_periodica(f, hoje) if f.periodica else
+                 _situacao_do_mes(f, hoje) if f.variavel else {})} for f in fixas]
     itens += [{"tipo": "assinatura", "obj": a, "dia": a.dia_cobranca, "nome": a.descricao, "valor": a.valor,
                "receita": False, "inativa": a.encerrada} for a in assinaturas]
     itens.sort(key=lambda i: (i["inativa"], i["dia"], i["nome"].lower()))
@@ -477,8 +488,8 @@ def painel(request, pk):
     fixas = list(conta.fixas.prefetch_related("pagamentos"))
     ativas = [f for f in fixas if f.ativa]
     assinaturas = _assinaturas(conta, hoje)
-    receitas_fixas = sum((f.valor for f in ativas if f.tipo == ContaFixa.RECEITA), Decimal("0"))
-    despesas_fixas = sum((f.valor for f in ativas if f.tipo == ContaFixa.DESPESA), Decimal("0"))
+    receitas_fixas = sum((f.valor_mensal for f in ativas if f.tipo == ContaFixa.RECEITA), Decimal("0"))
+    despesas_fixas = sum((f.valor_mensal for f in ativas if f.tipo == ContaFixa.DESPESA), Decimal("0"))
 
     anterior = primeiro - timedelta(days=1)
     seguinte = primeiro + timedelta(days=32)
@@ -654,17 +665,26 @@ def aporte_excluir(request, aporte_pk):
 @com_familia
 def pagamento_registrar(request, fixa_pk):
     """Marca a ocorrência (mês) de uma conta variável como paga, com o valor real."""
-    fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia, variavel=True)
+    fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia)
     referencia = _data_param(request.POST, "referencia")
-    if referencia is None:
+    if referencia is None or not fixa.marcavel:
         raise Http404
-    existente = fixa.pagamentos.filter(referencia__year=referencia.year,
-                                       referencia__month=referencia.month).first()
+    if fixa.periodica:
+        # a cada X dias: uma marcação por ocorrência (pode haver mais de uma no mês)
+        existente = fixa.pagamentos.filter(referencia=referencia).first()
+    else:
+        existente = fixa.pagamentos.filter(referencia__year=referencia.year,
+                                           referencia__month=referencia.month).first()
     form = PagamentoContaForm(request.POST, instance=existente or PagamentoConta(fixa=fixa, referencia=referencia))
     if form.is_valid():
         p = form.save()
         verbo = "recebida" if fixa.tipo == ContaFixa.RECEITA else "paga"
-        messages.success(request, f"{fixa.nome} de {referencia:%m/%Y} marcada como {verbo}: {brl(p.valor)}.")
+        if fixa.periodica:
+            proxima = p.data + timedelta(days=fixa.intervalo_dias)
+            messages.success(request, f"{fixa.nome}: {brl(p.valor)} em {p.data:%d/%m}. "
+                                      f"Próxima prevista para {proxima:%d/%m/%Y}.")
+        else:
+            messages.success(request, f"{fixa.nome} de {referencia:%m/%Y} marcada como {verbo}: {brl(p.valor)}.")
     else:
         for erros in form.errors.values():
             for erro in erros:

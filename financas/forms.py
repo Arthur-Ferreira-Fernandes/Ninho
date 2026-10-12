@@ -177,16 +177,17 @@ PagamentosSalarioFormSet = forms.inlineformset_factory(
 
 class ContaFixaForm(forms.ModelForm):
     dia = forms.TypedChoiceField(
-        label="Dia do mês", coerce=int, choices=[(d, d) for d in range(1, 32)],
-        widget=forms.RadioSelect,
-        error_messages={"required": "Escolha o dia do mês.", "invalid_choice": "Escolha um dia entre 1 e 31."},
+        label="Dia do mês", coerce=int, choices=[(d, d) for d in range(1, 32)], required=False,
+        widget=forms.RadioSelect, empty_value=None,
+        error_messages={"invalid_choice": "Escolha um dia entre 1 e 31."},
     )
 
     class Meta:
         model = ContaFixa
-        fields = ["tipo", "nome", "variavel", "valor", "dia", "ativa"]
+        fields = ["tipo", "nome", "variavel", "valor", "frequencia", "dia", "intervalo_dias", "proxima", "ativa"]
         labels = {"tipo": "Tipo", "nome": "Descrição", "valor": "Valor", "ativa": "Ativa",
-                  "variavel": "O valor muda todo mês"}
+                  "variavel": "O valor muda todo mês", "frequencia": "Com que frequência",
+                  "intervalo_dias": "A cada quantos dias", "proxima": "Próxima vez"}
         help_texts = {"ativa": "Desligada, deixa de contar em todos os meses, inclusive nos que já passaram.",
                       "variavel": "Luz, água, mercado… O valor abaixo vira uma estimativa, e a cada mês "
                                   "você marca como paga informando o valor real."}
@@ -194,6 +195,10 @@ class ContaFixaForm(forms.ModelForm):
             "tipo": forms.RadioSelect,
             "nome": forms.TextInput(attrs={"placeholder": "Ex.: Aluguel, Internet, Energia", "autocomplete": "off"}),
             "valor": _dinheiro(),
+            "frequencia": forms.RadioSelect,
+            "intervalo_dias": forms.NumberInput(attrs={"min": "1", "max": "3650", "inputmode": "numeric",
+                                                       "placeholder": "Ex.: 45"}),
+            "proxima": DATA,
         }
 
     def __init__(self, *args, **kwargs):
@@ -201,8 +206,36 @@ class ContaFixaForm(forms.ModelForm):
         if not self.instance.pk:
             del self.fields["ativa"]  # novas já nascem ativas
         if self.instance.salario:
-            del self.fields["tipo"]      # pagamento de salário é sempre receita
-            del self.fields["variavel"]  # e tem valor definido na configuração da conta
+            del self.fields["tipo"]        # pagamento de salário é sempre receita
+            del self.fields["variavel"]    # e tem valor definido na configuração da conta
+            del self.fields["frequencia"]  # e cai todo mês
+            del self.fields["intervalo_dias"]
+            del self.fields["proxima"]
+        else:
+            self.fields["frequencia"].required = False
+
+    def clean(self):
+        dados = super().clean()
+        if "frequencia" not in self.fields:   # salário: sempre mensal, só o dia importa
+            if not dados.get("dia"):
+                self.add_error("dia", "Escolha o dia do mês.")
+            return dados
+        if dados.get("frequencia") == ContaFixa.DIAS:
+            intervalo, proxima = dados.get("intervalo_dias"), dados.get("proxima")
+            if not intervalo:
+                self.add_error("intervalo_dias", "Informe de quantos em quantos dias.")
+            elif not 1 <= intervalo <= 3650:
+                self.add_error("intervalo_dias", "Use de 1 a 3650 dias.")
+            if not proxima:
+                self.add_error("proxima", "Informe a data prevista da próxima vez.")
+            else:
+                dados["dia"] = proxima.day   # o dia do mês não se aplica; guarda só por referência
+        else:
+            dados["frequencia"] = ContaFixa.MENSAL
+            if not dados.get("dia"):
+                self.add_error("dia", "Escolha o dia do mês.")
+            dados["intervalo_dias"] = dados["proxima"] = None
+        return dados
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]

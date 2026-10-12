@@ -1426,3 +1426,72 @@ class AporteTests(TestCase):
                                           {"valor": "1", "data": "2026-01-02"}).status_code, 404)
         self.assertEqual(self.client.post(reverse("financas:aporte_excluir", args=[a.pk])).status_code, 404)
         self.assertTrue(Aporte.objects.filter(pk=a.pk).exists())
+
+
+class ContaPeriodicaTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("5000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("0"))
+        self.carro = ContaFixa.objects.create(conta=self.conta, nome="Produtos do carro", valor=Decimal("150"),
+                                              dia=10, frequencia=ContaFixa.DIAS, intervalo_dias=45,
+                                              proxima=date(2026, 1, 10))
+        self.painel = reverse("financas:painel", args=[self.conta.pk])
+
+    def datas(self, inicio=date(2026, 1, 1), fim=date(2026, 6, 30)):
+        return [e.data for e in eventos_fixa(ContaFixa.objects.get(pk=self.carro.pk), inicio, fim)]
+
+    def test_a_cada_45_dias(self):
+        self.assertEqual(self.datas(), [date(2026, 1, 10), date(2026, 2, 24), date(2026, 4, 10), date(2026, 5, 25)])
+        self.assertEqual(self.carro.valor_mensal, Decimal("101.39"))   # 150 × 365 ÷ (12 × 45)
+
+    def test_compra_atrasada_empurra_a_proxima(self):
+        PagamentoConta.objects.create(fixa=self.carro, referencia=date(2026, 1, 10), valor=Decimal("180"),
+                                      data=date(2026, 1, 20))
+        self.assertEqual(self.datas(), [date(2026, 1, 20), date(2026, 3, 6), date(2026, 4, 20), date(2026, 6, 4)])
+        e = eventos_fixa(ContaFixa.objects.get(pk=self.carro.pk), date(2026, 1, 1), date(2026, 1, 31))[0]
+        self.assertEqual((e.valor, e.vencimento, e.pagamento is not None), (Decimal("180"), date(2026, 1, 10), True))
+
+    def test_compra_adiantada(self):
+        PagamentoConta.objects.create(fixa=self.carro, referencia=date(2026, 1, 10), valor=Decimal("150"),
+                                      data=date(2026, 1, 5))
+        self.assertEqual(self.datas(fim=date(2026, 3, 31)), [date(2026, 1, 5), date(2026, 2, 19)])
+
+    def test_saldo_extrato_e_proximos(self):
+        PagamentoConta.objects.create(fixa=self.carro, referencia=date(2026, 1, 10), valor=Decimal("180"),
+                                      data=date(2026, 1, 20))
+        self.assertEqual(saldo_esperado(self.conta, date(2026, 3, 31)).esperado, Decimal("5000") - 180 - 150)
+        for d in extrato_mes(self.conta, 2026, 1) + extrato_mes(self.conta, 2026, 3):
+            self.assertEqual(d.esperado, saldo_esperado(self.conta, d.data).esperado, d.data)
+        prox = proximas_fixas(self.conta, date(2026, 2, 1), 2)
+        self.assertEqual([d for d, _ in prox], [date(2026, 3, 6), date(2026, 4, 20)])
+
+    def test_formulario(self):
+        url = reverse("financas:fixa_nova", args=[self.conta.pk])
+        r = self.client.post(url, {"tipo": "despesa", "nome": "Ração", "valor": "120", "frequencia": "dias"})
+        self.assertContains(r, "Informe de quantos em quantos dias")
+        self.assertContains(r, "Informe a data prevista da próxima vez")
+        self.client.post(url, {"tipo": "despesa", "nome": "Ração", "valor": "120", "frequencia": "dias",
+                               "intervalo_dias": "20", "proxima": "2026-02-03"})
+        racao = ContaFixa.objects.get(nome="Ração")
+        self.assertEqual((racao.frequencia, racao.intervalo_dias, racao.proxima, racao.dia),
+                         ("dias", 20, date(2026, 2, 3), 3))
+        r = self.client.post(url, {"tipo": "despesa", "nome": "Internet", "valor": "100", "frequencia": "mensal"})
+        self.assertContains(r, "Escolha o dia do mês")
+        self.client.post(url, {"tipo": "despesa", "nome": "Internet", "valor": "100", "frequencia": "mensal",
+                               "dia": "10", "intervalo_dias": "5", "proxima": "2026-02-03"})
+        internet = ContaFixa.objects.get(nome="Internet")
+        self.assertEqual((internet.frequencia, internet.intervalo_dias, internet.proxima), ("mensal", None, None))
+
+    def test_marcar_pela_tela_e_lista(self):
+        url = reverse("financas:pagamento_registrar", args=[self.carro.pk])
+        self.client.post(url, {"referencia": "2026-01-10", "valor": "170", "data": "2026-01-12"})
+        self.client.post(url, {"referencia": "2026-01-10", "valor": "175", "data": "2026-01-12"})   # corrige
+        p = PagamentoConta.objects.get()
+        self.assertEqual((p.valor, p.referencia), (Decimal("175"), date(2026, 1, 10)))
+        r = self.client.get(self.painel)
+        item = [i for i in r.context["recorrentes"] if i["obj"].pk == self.carro.pk][0]
+        self.assertEqual(item["ultima_compra"], p)
+        self.assertContains(r, "a cada 45 dias")
+        self.assertEqual(r.context["totais_fixas"]["despesas"], Decimal("101.39"))   # equivalente mensal
