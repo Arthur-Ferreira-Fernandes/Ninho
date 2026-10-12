@@ -16,10 +16,10 @@ from django.views.decorators.http import require_POST
 from .calculos import (alerta_saldo, aplicar_escala, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
-from .forms import (AporteForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
+from .forms import (AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
                     LancamentoForm, PagamentosSalarioFormSet, UsoDiarioForm, UsuarioForm)
 from .templatetags.dinheiro import brl
-from .models import (Aporte, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
+from .models import (Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
                      gerar_codigo_convite)
 
 # modelo da URL -> (Model, Form, título)
@@ -600,6 +600,34 @@ def _voltar_ao_painel(modelo, item, voltar=None):
     return redirect(_destino_painel(modelo, item, voltar))
 
 
+# ---------- Gastos detalhados do dinheiro do dia ----------
+
+def _voltar_ao_dia(conta, data):
+    return redirect(reverse("financas:painel", args=[conta.pk]) + f"?mes={data:%Y-%m}&dia={data:%Y-%m-%d}#extrato")
+
+
+@require_POST
+@com_familia
+def gasto_dia_adicionar(request, pk):
+    conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
+    form = GastoDiaForm(request.POST, conta=conta, hoje=date.today(), instance=GastoDia(conta=conta))
+    if form.is_valid():
+        form.save()
+    else:
+        _mostrar_erros(request, form)
+    data = _data_param(request.POST, "data") or date.today()
+    return _voltar_ao_dia(conta, data)
+
+
+@require_POST
+@com_familia
+def gasto_dia_excluir(request, gasto_pk):
+    gasto = get_object_or_404(GastoDia, pk=gasto_pk, conta__familia=request.familia)
+    conta, data = gasto.conta, gasto.data
+    gasto.delete()
+    return _voltar_ao_dia(conta, data)
+
+
 # ---------- Investimentos: o que foi guardado de fato ----------
 
 def _aba_investimentos(conta):
@@ -671,7 +699,7 @@ def pagamento_registrar(request, fixa_pk):
     """Marca a ocorrência (mês) de uma conta variável como paga, com o valor real."""
     fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia)
     referencia = _data_param(request.POST, "referencia")
-    if referencia is None or not fixa.marcavel:
+    if referencia is None:
         raise Http404
     if fixa.periodica:
         # a cada X dias: uma marcação por ocorrência (pode haver mais de uma no mês)
@@ -683,7 +711,10 @@ def pagamento_registrar(request, fixa_pk):
     if form.is_valid():
         p = form.save()
         verbo = "recebida" if fixa.tipo == ContaFixa.RECEITA else "paga"
-        if fixa.periodica:
+        if not fixa.marcavel:
+            messages.success(request, f"{fixa.nome} de {referencia:%m/%Y} ajustado só neste mês: "
+                                      f"{brl(p.valor)} em {p.data:%d/%m}. Os outros meses continuam com {brl(fixa.valor)}.")
+        elif fixa.periodica:
             proxima = p.data + timedelta(days=fixa.intervalo_dias)
             messages.success(request, f"{fixa.nome}: {brl(p.valor)} em {p.data:%d/%m}. "
                                       f"Próxima prevista para {proxima:%d/%m/%Y}.")
@@ -701,8 +732,12 @@ def pagamento_registrar(request, fixa_pk):
 def pagamento_excluir(request, pagamento_pk):
     pagamento = get_object_or_404(PagamentoConta, pk=pagamento_pk, fixa__conta__familia=request.familia)
     fixa = pagamento.fixa
-    messages.success(request, f"Pagamento de {fixa.nome} de {pagamento.referencia:%m/%Y} desfeito; "
-                              "volta a valer a estimativa.")
+    if fixa.marcavel:
+        messages.success(request, f"Pagamento de {fixa.nome} de {pagamento.referencia:%m/%Y} desfeito; "
+                                  "volta a valer a estimativa.")
+    else:
+        messages.success(request, f"Ajuste de {fixa.nome} em {pagamento.referencia:%m/%Y} desfeito; "
+                                  f"volta a valer {brl(fixa.valor)}.")
     pagamento.delete()
     return _voltar_ao_painel("fixa", fixa, request.POST.get("voltar"))
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Aporte, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, PedidoEntrada, UsoDiario
+from .models import Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, PedidoEntrada, UsoDiario
 
 
 class MembroInline(admin.TabularInline):
@@ -72,3 +72,8 @@ class PagamentoContaAdmin(admin.ModelAdmin):
 class AporteAdmin(admin.ModelAdmin):
     list_display = ["conta", "tipo", "referencia", "data", "valor", "descricao"]
     list_filter = ["tipo"]
+
+
+@admin.register(GastoDia)
+class GastoDiaAdmin(admin.ModelAdmin):
+    list_display = ["data", "descricao", "valor", "conta"]

@@ -102,7 +102,8 @@
             <td class="num col-opc pos">{% if d.entradas %}{{ d.entradas|brl }}{% endif %}</td>
             <td class="num col-opc neg">{% if d.saidas %}{{ d.saidas|brl }}{% endif %}</td>
             <td class="num col-opc col-uso" title="Disponível: {{ d.disponivel|brl }}">
-              {% if d.uso.situacao == "nada" %}<span class="uso-tag nada">não usou</span>
+              {% if d.itens %}<span class="uso-icone ok" title="{{ d.itens|length }} gasto{{ d.itens|length|pluralize }} lançado{{ d.itens|length|pluralize }}">≡</span>{{ d.gasto|brl }}
+              {% elif d.uso.situacao == "nada" %}<span class="uso-tag nada">não usou</span>
               {% elif d.uso.situacao == "parte" %}<span class="uso-icone" aria-label="outro valor">◐</span>{{ d.gasto|brl }}
               {% elif d.uso %}<span class="uso-icone ok" aria-label="usou tudo">✓</span>{{ d.gasto|brl }}
               {% else %}<span class="suave">{{ d.gasto|brl }}</span>{% endif %}
@@ -270,7 +271,30 @@
         {% else %}
         <div class="mov">
           <dt><a href="{% url 'financas:item_editar' m.origem m.objeto.pk %}">{{ m.nome }}</a>
-            <small>{% if m.origem == "fixa" %}{% if m.objeto.periodica %}a cada {{ m.objeto.intervalo_dias }} dias · {% if m.evento.pagamento %}{% if m.entrada %}recebido{% else %}feito{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (previsto {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}previsto{% endif %}{% elif m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
+            <small>{% if m.origem == "fixa" %}{% if m.objeto.periodica %}a cada {{ m.objeto.intervalo_dias }} dias · {% if m.evento.pagamento %}{% if m.entrada %}recebido{% else %}feito{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (previsto {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}previsto{% endif %}{% elif m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% elif m.evento.ajustado %}conta fixa · ajustada neste mês (normalmente {{ m.objeto.valor|brl }}{% if m.evento.pagamento.data != m.evento.vencimento %}, dia {{ m.evento.vencimento|date:"d/m" }}{% endif %}){% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
+            {% if m.origem == "fixa" and not m.objeto.marcavel %}
+              {% if m.evento.ajustado %}
+              <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
+                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                <span class="ajuste-selo">ajustado</span>
+                <button type="submit" class="acao-item">Desfazer ajuste</button>
+              </form>
+              {% else %}
+              <details class="ajuste-mes">
+                <summary class="acao-item">Alterar só neste mês</summary>
+                <form method="post" action="{% url 'financas:pagamento_registrar' m.objeto.pk %}" class="pagar-form">{% csrf_token %}
+                  <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
+                  <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                  <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+                    <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required
+                           value="{{ m.valor|stringformat:'s' }}" aria-label="Valor de {{ m.nome }} só neste mês">
+                  </div>
+                  <input type="date" name="data" value="{{ m.evento.vencimento|date:'Y-m-d' }}" aria-label="Data neste mês" required>
+                  <button type="submit" class="btn">Salvar</button>
+                </form>
+              </details>
+              {% endif %}
+            {% endif %}
             {% if m.origem == "fixa" and m.objeto.marcavel %}
               {% if m.evento.pagamento %}
               <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
@@ -316,7 +340,7 @@
         {% endfor %}
         <div class="mov">
           <dt>Dinheiro do dia a dia
-            <small>{% if dia.uso.situacao == "nada" %}não usado{% elif dia.uso.situacao == "parte" %}usado em parte{% elif dia.uso %}usado{% elif dia.data > hoje %}previsto{% else %}não informado, conta como usado{% endif %}</small></dt>
+            <small>{% if dia.itens %}{{ dia.itens|length }} gasto{{ dia.itens|length|pluralize }} lançado{{ dia.itens|length|pluralize }}{% elif dia.uso.situacao == "nada" %}não usado{% elif dia.uso.situacao == "parte" %}usado em parte{% elif dia.uso %}usado{% elif dia.data > hoje %}previsto{% else %}não informado, conta como usado{% endif %}</small></dt>
           <dd class="neg">− {{ dia.gasto|brl }}</dd>
         </div>
         <div class="total"><dt>Saldo esperado ao fim do dia</dt><dd class="{% if dia.esperado < 0 %}neg{% endif %}">{{ dia.esperado|brl }}</dd></div>
@@ -334,6 +358,48 @@
         {% endif %}
 
         {% if dia.data <= hoje %}
+        <div class="gastos-dia">
+          <div class="gastos-cab">
+            <strong>Gastos do dia</strong>
+            {% if dia.itens %}<span>{{ dia.itens|length }} lançamento{{ dia.itens|length|pluralize }}</span>{% endif %}
+          </div>
+          {% if dia.itens %}
+          <ul class="gastos-lista">
+            {% for g in dia.itens %}
+            <li>
+              <span>{{ g.descricao|default:"Gasto" }}</span>
+              <b>{{ g.valor|brl }}</b>
+              <form method="post" action="{% url 'financas:gasto_dia_excluir' g.pk %}">{% csrf_token %}
+                <button type="submit" class="gasto-remover" aria-label="Excluir {{ g.descricao|default:'gasto' }} de {{ g.valor|brl }}" title="Excluir">×</button>
+              </form>
+            </li>
+            {% endfor %}
+            <li class="gastos-total"><span>Total</span><b>{{ dia.gasto|brl }}</b><span></span></li>
+          </ul>
+          {% endif %}
+          <form method="post" action="{% url 'financas:gasto_dia_adicionar' conta.pk %}" class="gasto-form">{% csrf_token %}
+            <input type="hidden" name="data" value="{{ dia.data|date:'Y-m-d' }}">
+            <input type="text" name="descricao" maxlength="120" placeholder="O quê?" aria-label="Descrição do gasto (opcional)" list="sugestoes-gasto">
+            <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+              <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" placeholder="0,00" required aria-label="Valor do gasto">
+            </div>
+            <button type="submit" class="btn" aria-label="Adicionar gasto">+</button>
+          </form>
+          <datalist id="sugestoes-gasto">
+            <option value="Mercado"><option value="Padaria"><option value="Transporte"><option value="Lanche">
+            <option value="Almoço"><option value="Farmácia"><option value="Combustível"><option value="Lazer">
+          </datalist>
+        </div>
+
+        {% if dia.itens %}
+        <p class="dd-status">
+          Gastou <b>{{ dia.gasto|brl }}</b> de {{ dia.disponivel|brl }}.
+          {% if dia.gasto < dia.disponivel %}Sobra de {{ dia.disponivel|sub:dia.gasto|brl }} diluída nos próximos dias do mês.
+          {% elif dia.gasto > dia.disponivel %}{{ dia.gasto|sub:dia.disponivel|brl }} acima; os próximos dias ficam com menos.
+          {% else %}Exatamente o disponível.{% endif %}
+        </p>
+        {% else %}
+        <p class="dd-ou">ou, sem detalhar:</p>
         <form method="post" action="{% url 'financas:uso_diario' conta.pk %}" class="uso-opcoes">{% csrf_token %}
           <input type="hidden" name="data" value="{{ dia.data|date:'Y-m-d' }}">
           <button type="submit" name="situacao" value="tudo" class="uso-btn{% if dia.uso.situacao == 'tudo' %} ativo{% endif %}">✓ Usei tudo</button>
@@ -366,6 +432,7 @@
           <input type="hidden" name="data" value="{{ dia.data|date:'Y-m-d' }}">
           <input type="hidden" name="situacao" value="limpar">
         </form>
+        {% endif %}
         {% else %}
           <p class="dd-status">Previsão. A partir deste dia você poderá dizer se usou.</p>
         {% endif %}

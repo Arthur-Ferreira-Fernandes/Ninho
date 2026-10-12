@@ -56,6 +56,11 @@ class EventoFixa:
     def estimado(self):
         return self.fixa.variavel and self.pagamento is None
 
+    @property
+    def ajustado(self):
+        """Conta comum com valor/data alterados só nesta ocorrência."""
+        return self.pagamento is not None and not self.fixa.marcavel
+
     # mesmos nomes de uma conta fixa, para listas de vencimentos
     @property
     def nome(self):
@@ -109,9 +114,8 @@ def eventos_fixa(fixa, inicio, fim):
 def _eventos_sem_vigencia(fixa, inicio, fim):
     if fixa.periodica:
         return _eventos_periodicos(fixa, inicio, fim)
-    if not fixa.variavel:
-        return [EventoFixa(fixa, d, fixa.valor, d) for d in _ocorrencias(fixa, inicio, fim)]
-    # o pagamento pode sair antes ou depois do vencimento: olha uma folga de 2 meses
+    # Mensal (variável ou não): um pagamento/ajuste registrado para o mês substitui
+    # o valor e a data daquele mês (o pagamento pode sair antes ou depois: folga de 2 meses).
     pagos = {(p.referencia.year, p.referencia.month): p for p in fixa.pagamentos.all()}
     eventos = []
     for d in _ocorrencias(fixa, inicio - timedelta(days=62), fim + timedelta(days=62)):
@@ -133,14 +137,27 @@ class DiaOrcamento:
     disponivel: Decimal   # o que pode ser usado no dia, já com sobras/faltas anteriores
     gasto: Decimal        # o que conta como usado
     uso: object = None    # UsoDiario, se a pessoa informou
+    itens: list = field(default_factory=list)   # gastos detalhados do dia
 
 
 def _usos(conta, inicio, fim):
     return {u.data: u for u in conta.usos.filter(data__gte=inicio, data__lte=fim)}
 
 
-def simular_mes(conta, ano, mes, usos=None):
-    """Envelope do dia a dia de um mês: um DiaOrcamento por dia ativo."""
+def _gastos(conta, inicio, fim):
+    """Gastos detalhados do dia a dia por data: {data: [GastoDia, ...]}."""
+    por_data = {}
+    for g in conta.gastos_dia.filter(data__gte=inicio, data__lte=fim):
+        por_data.setdefault(g.data, []).append(g)
+    return por_data
+
+
+def simular_mes(conta, ano, mes, usos=None, gastos=None):
+    """Envelope do dia a dia de um mês: um DiaOrcamento por dia ativo.
+
+    O que conta como usado em cada dia: a soma dos gastos detalhados, se houver;
+    senão o que foi informado (tudo / nada / outro valor); sem nada, tudo.
+    """
     dias_no_mes = calendar.monthrange(ano, mes)[1]
     ultimo = date(ano, mes, dias_no_mes)
     inicio = max(date(ano, mes, 1), conta.data_inicio)
@@ -148,6 +165,8 @@ def simular_mes(conta, ano, mes, usos=None):
         return []
     if usos is None:
         usos = _usos(conta, inicio, ultimo)
+    if gastos is None:
+        gastos = _gastos(conta, inicio, ultimo)
 
     dias_ativos = (ultimo - inicio).days + 1
     orcamento = conta.orcamento_mensal_em(date(ano, mes, 1))   # muda com o salário do mês
@@ -157,15 +176,17 @@ def simular_mes(conta, ano, mes, usos=None):
     for i in range(dias_ativos):
         d = inicio + timedelta(days=i)
         disponivel = max(restante / (dias_ativos - i), ZERO).quantize(CENTAVO)
-        uso = usos.get(d)
-        if uso is None or uso.situacao == UsoDiario.TUDO:
+        uso, itens = usos.get(d), gastos.get(d, [])
+        if itens:
+            gasto = sum((g.valor for g in itens), ZERO)
+        elif uso is None or uso.situacao == UsoDiario.TUDO:
             gasto = disponivel
         elif uso.situacao == UsoDiario.NADA:
             gasto = ZERO
         else:
             gasto = uso.valor or ZERO
         restante -= gasto
-        resultado.append(DiaOrcamento(d, base, disponivel, gasto, uso))
+        resultado.append(DiaOrcamento(d, base, disponivel, gasto, uso, itens))
     return resultado
 
 
@@ -173,10 +194,11 @@ def gasto_no_periodo(conta, inicio, fim):
     """Dinheiro do dia a dia usado entre inicio e fim (inclusive)."""
     ultimo = date(fim.year, fim.month, calendar.monthrange(fim.year, fim.month)[1])
     usos = _usos(conta, inicio, ultimo)
+    gastos = _gastos(conta, inicio, ultimo)
     total = ZERO
     ano, mes = inicio.year, inicio.month
     while (ano, mes) <= (fim.year, fim.month):
-        for d in simular_mes(conta, ano, mes, usos):
+        for d in simular_mes(conta, ano, mes, usos, gastos):
             if inicio <= d.data <= fim:
                 total += d.gasto
         ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
@@ -240,7 +262,7 @@ def proximas_fixas(conta, hoje, quantidade=5):
     itens = []
     for fixa in _fixas_ativas(conta):
         for e in eventos_fixa(fixa, inicio, fim):
-            if e.pagamento is None:   # o que já foi pago não é mais um vencimento
+            if e.pagamento is None or e.ajustado:   # pago sai da lista; ajustado continua
                 itens.append((e.data, e))
     itens.sort(key=lambda x: x[0])
     return itens[:quantidade]
@@ -268,6 +290,7 @@ class Dia:
     disponivel: Decimal = None      # dinheiro do dia a dia disponível
     base: Decimal = None            # valor diário sem sobras
     uso: object = None              # UsoDiario informado
+    itens: list = field(default_factory=list)   # gastos detalhados do dia
     esperado: Decimal = None        # saldo esperado ao fim do dia
     conferencia: object = None
     diferenca: Decimal = None
@@ -340,7 +363,7 @@ def extrato_mes(conta, ano, mes):
         dia.movimentos.sort(key=lambda m: (not m.entrada, m.nome))
         dia.entradas = sum((m.valor for m in dia.movimentos if m.entrada), ZERO)
         dia.saidas = sum((m.valor for m in dia.movimentos if not m.entrada), ZERO)
-        dia.base, dia.disponivel, dia.gasto, dia.uso = o.base, o.disponivel, o.gasto, o.uso
+        dia.base, dia.disponivel, dia.gasto, dia.uso, dia.itens = o.base, o.disponivel, o.gasto, o.uso, o.itens
         dia.inicio = anterior
         dia.esperado = anterior + dia.entradas - dia.saidas - dia.gasto
         if dia.conferencia:

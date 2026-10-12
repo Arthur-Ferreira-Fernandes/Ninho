@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .calculos import Dia, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
-from .models import (Aporte, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro,
+from .models import (Aporte, AssinaturaCartao, GastoDia, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro,
                      PedidoEntrada, UsoDiario)
 
 
@@ -1140,10 +1140,12 @@ class ContaVariavelTests(TestCase):
     def test_validacoes_e_permissoes(self):
         self.client.post(self.pagar, {"referencia": "2026-02-10", "valor": "0", "data": "2026-02-09"})
         self.assertFalse(PagamentoConta.objects.exists())
+        # conta comum também aceita, como "ajuste só neste mês"
         fixa_comum = ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=1500, dia=5)
         r = self.client.post(reverse("financas:pagamento_registrar", args=[fixa_comum.pk]),
-                             {"referencia": "2026-02-05", "valor": "1500", "data": "2026-02-05"})
-        self.assertEqual(r.status_code, 404)
+                             {"referencia": "2026-02-05", "valor": "1550", "data": "2026-02-05"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(fixa_comum.pagamentos.get().valor, Decimal("1550"))
         outra = Conta.objects.create(familia=Familia.objects.create(nome="Vizinhos"), nome="Deles",
                                      saldo_inicial=0, data_inicio=date(2026, 1, 1))
         alheia = ContaFixa.objects.create(conta=outra, nome="Luz", valor=100, dia=10, variavel=True)
@@ -1611,3 +1613,95 @@ class VigenciaTests(TestCase):
         r = self.client.get(reverse("financas:painel", args=[self.conta.pk]))
         self.assertContains(r, "começa em 01/02/2099")
         self.assertEqual(r.context["totais_fixas"]["despesas"], 0)   # ainda não vale
+
+
+class GastosDoDiaTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        # novembro: 300/mês = 10/dia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
+                                          data_inicio=date(2026, 11, 1), gasto_mensal=Decimal("300"))
+
+    def gasto(self, dia, valor, descricao=""):
+        return GastoDia.objects.create(conta=self.conta, data=date(2026, 11, dia), valor=Decimal(valor),
+                                       descricao=descricao)
+
+    def test_soma_dos_gastos_e_o_uso_do_dia(self):
+        self.gasto(1, "3.50", "Padaria")
+        self.gasto(1, "2.50", "Ônibus")
+        UsoDiario.objects.create(conta=self.conta, data=date(2026, 11, 1), situacao=UsoDiario.TUDO)  # ignorado
+        dias = simular_mes(self.conta, 2026, 11)
+        self.assertEqual((dias[0].gasto, len(dias[0].itens)), (Decimal("6.00"), 2))
+        self.assertEqual(dias[1].disponivel, Decimal("10.14"))       # sobra de 4 diluída: 294 / 29
+        self.assertEqual(sum(d.gasto for d in dias), Decimal("300"))
+        for d in extrato_mes(self.conta, 2026, 11):
+            self.assertEqual(d.esperado, saldo_esperado(self.conta, d.data).esperado, d.data)
+        self.assertEqual([g.descricao for g in extrato_mes(self.conta, 2026, 11)[0].itens], ["Padaria", "Ônibus"])
+
+    def test_tela_adicionar_e_excluir(self):
+        hoje = date.today()
+        self.conta.data_inicio = hoje.replace(day=1)
+        self.conta.save()
+        url = reverse("financas:gasto_dia_adicionar", args=[self.conta.pk])
+        painel = reverse("financas:painel", args=[self.conta.pk]) + f"?mes={hoje:%Y-%m}&dia={hoje:%Y-%m-%d}#extrato"
+        r = self.client.post(url, {"data": hoje.isoformat(), "descricao": "Mercado", "valor": "32.40"})
+        self.assertRedirects(r, painel, fetch_redirect_response=False)
+        self.client.post(url, {"data": hoje.isoformat(), "descricao": "", "valor": "8"})
+        tela = self.client.get(painel.split("#")[0])
+        self.assertEqual(tela.context["dia"].gasto, Decimal("40.40"))
+        self.assertContains(tela, "Mercado")
+        g = GastoDia.objects.get(descricao="Mercado")
+        self.client.post(reverse("financas:gasto_dia_excluir", args=[g.pk]))
+        self.assertEqual(GastoDia.objects.count(), 1)
+
+    def test_validacoes_e_outra_familia(self):
+        url = reverse("financas:gasto_dia_adicionar", args=[self.conta.pk])
+        self.client.post(url, {"data": "2099-01-01", "valor": "5"})
+        self.client.post(url, {"data": "2026-10-31", "valor": "5"})      # antes do início
+        self.client.post(url, {"data": "2026-11-02", "valor": "0"})
+        self.assertFalse(GastoDia.objects.exists())
+        outra = Conta.objects.create(familia=Familia.objects.create(nome="Vizinhos"), nome="Deles",
+                                     saldo_inicial=0, data_inicio=date(2026, 1, 1))
+        g = GastoDia.objects.create(conta=outra, data=date(2026, 1, 2), valor=1)
+        self.assertEqual(self.client.post(reverse("financas:gasto_dia_adicionar", args=[outra.pk]),
+                                          {"data": "2026-01-02", "valor": "1"}).status_code, 404)
+        self.assertEqual(self.client.post(reverse("financas:gasto_dia_excluir", args=[g.pk])).status_code, 404)
+
+
+class AjusteDoMesTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("0"))
+        self.salario = ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("4000"), dia=5,
+                                                tipo=ContaFixa.RECEITA, salario=True)
+        self.url = reverse("financas:pagamento_registrar", args=[self.salario.pk])
+
+    def test_muda_so_o_mes_escolhido(self):
+        r = self.client.post(self.url, {"referencia": "2026-02-05", "valor": "4600", "data": "2026-02-04",
+                                        "voltar": "dia:2026-02-05"})
+        self.assertRedirects(r, reverse("financas:painel", args=[self.conta.pk]) + "?mes=2026-02&dia=2026-02-05#extrato",
+                             fetch_redirect_response=False)
+        fixa = ContaFixa.objects.get(pk=self.salario.pk)
+        valores = [(e.data, e.valor, e.ajustado) for e in eventos_fixa(fixa, date(2026, 1, 1), date(2026, 3, 31))]
+        self.assertEqual(valores, [(date(2026, 1, 5), Decimal("4000"), False),
+                                   (date(2026, 2, 4), Decimal("4600"), True),
+                                   (date(2026, 3, 5), Decimal("4000"), False)])
+        self.assertEqual(fixa.valor, Decimal("4000"))                       # o cadastro não muda
+        self.assertEqual(saldo_esperado(self.conta, date(2026, 3, 31)).esperado, Decimal("1000") + 4000 + 4600 + 4000)
+        for d in extrato_mes(self.conta, 2026, 2):
+            self.assertEqual(d.esperado, saldo_esperado(self.conta, d.data).esperado, d.data)
+
+    def test_ajuste_futuro_continua_nos_proximos_e_desfaz(self):
+        self.client.post(self.url, {"referencia": "2026-03-05", "valor": "4100", "data": "2026-03-05"})
+        prox = proximas_fixas(self.conta, date(2026, 2, 10), 2)
+        self.assertEqual([(d, e.valor) for d, e in prox], [(date(2026, 3, 5), Decimal("4100")), (date(2026, 4, 5), Decimal("4000"))])
+        p = PagamentoConta.objects.get()
+        self.client.post(reverse("financas:pagamento_excluir", args=[p.pk]))
+        self.assertFalse(PagamentoConta.objects.exists())
+
+    def test_tela_mostra_alterar_so_neste_mes(self):
+        r = self.client.get(reverse("financas:painel", args=[self.conta.pk]) + "?mes=2026-02&dia=2026-02-05")
+        self.assertContains(r, "Alterar só neste mês")

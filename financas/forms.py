@@ -7,7 +7,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .templatetags.dinheiro import brl
-from .models import Aporte, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, UsoDiario
+from .models import Aporte, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, UsoDiario
 
 DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
@@ -536,4 +536,29 @@ class AporteForm(forms.ModelForm):
             limite = date(ano, mes, calendar.monthrange(ano, mes)[1])
             if not ref <= data <= limite:
                 raise forms.ValidationError("Use uma data do próprio mês ou do mês seguinte.")
+        return data
+
+
+class GastoDiaForm(forms.ModelForm):
+    class Meta:
+        model = GastoDia
+        fields = ["data", "descricao", "valor"]
+
+    def __init__(self, *args, conta, hoje, **kwargs):
+        self.conta, self.hoje = conta, hoje
+        super().__init__(*args, **kwargs)
+        self.fields["descricao"].required = False
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
+        if valor <= 0:
+            raise forms.ValidationError("Informe um valor maior que zero.")
+        return valor
+
+    def clean_data(self):
+        data = self.cleaned_data["data"]
+        if data < self.conta.data_inicio:
+            raise forms.ValidationError("Esse dia é anterior ao início do cálculo.")
+        if data > self.hoje:
+            raise forms.ValidationError("Só dá para lançar gastos de hoje ou de dias passados.")
         return data

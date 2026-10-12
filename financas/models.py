@@ -439,3 +439,23 @@ class Aporte(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} {self.data:%d/%m/%Y}: {self.valor}"
+
+
+class GastoDia(models.Model):
+    """Um gasto do dinheiro do dia a dia, para detalhar o que foi usado no dia.
+
+    Quando um dia tem gastos lançados, a soma deles é o que foi usado naquele dia.
+    """
+
+    conta = models.ForeignKey(Conta, on_delete=models.CASCADE, related_name="gastos_dia")
+    data = models.DateField()
+    descricao = models.CharField(max_length=120, blank=True)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ["data", "id"]
+        verbose_name = "gasto do dia"
+        verbose_name_plural = "gastos do dia"
+
+    def __str__(self):
+        return f"{self.data:%d/%m} {self.descricao or 'gasto'}: {self.valor}"
