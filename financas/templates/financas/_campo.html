@@ -1,0 +1,14 @@
+<div class="campo{% if field.errors %} com-erro{% endif %}{% if classe %} {{ classe }}{% endif %}">
+  <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required and not obrigatorio %} <span class="opcional">(opcional)</span>{% endif %}</label>
+  <div class="campo-input{% if prefixo %} com-prefixo{% endif %}{% if sufixo %} com-sufixo{% endif %}">
+    {% if prefixo %}<span class="prefixo" aria-hidden="true">{{ prefixo }}</span>{% endif %}
+    {{ field }}
+    {% if sufixo %}<span class="sufixo" aria-hidden="true">{{ sufixo }}</span>{% endif %}
+    {% if field.field.widget.input_type == "password" %}
+      <button type="button" class="ver-senha" aria-label="Mostrar senha"
+              onclick="const i=this.parentElement.querySelector('input');const v=i.type==='password';i.type=v?'text':'password';this.textContent=v?'Ocultar':'Mostrar'">Mostrar</button>
+    {% endif %}
+  </div>
+  {% for erro in field.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+  {% if field.help_text and not field.errors %}<p class="ajuda">{{ field.help_text|safe }}</p>{% endif %}
+</div>

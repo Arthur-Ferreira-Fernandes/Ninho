@@ -1,0 +1,84 @@
+{% extends "financas/base.html" %}
+{% block titulo %}{{ familia }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<h1>{{ familia }}</h1>
+
+{% if pode_editar %}
+<div class="card">
+  <h2>Convidar pessoas</h2>
+  <p class="rotulo" style="margin-top:0">Envie este código. A pessoa cria a conta dela, informa o código e você aprova o pedido aqui.</p>
+  <div class="linha">
+    <code id="codigo" style="font-size:1.6rem;letter-spacing:.15em;font-weight:700">{{ familia.codigo_convite }}</code>
+    <button class="btn sec" type="button"
+            onclick="navigator.clipboard.writeText('{{ familia.codigo_convite }}');this.textContent='Copiado!'">Copiar</button>
+    <form method="post" action="{% url 'financas:codigo_novo' %}"
+          onsubmit="return confirm('Gerar outro código? O atual deixa de funcionar.')">{% csrf_token %}
+      <button class="btn sec" type="submit">Gerar novo código</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Pedidos para entrar {% if pedidos %}<span class="etiqueta">{{ pedidos|length }}</span>{% endif %}</h2>
+  <table>
+    {% for p in pedidos %}
+    <tr>
+      <td>{{ p.usuario.get_full_name|default:p.usuario.username }}</td>
+      <td>{{ p.parentesco|default:"—" }}</td>
+      <td>{{ p.usuario.username }}{% if p.usuario.email %} · {{ p.usuario.email }}{% endif %}</td>
+      <td class="rotulo">{{ p.criado_em|date:"d/m H:i" }}</td>
+      <td><div class="acoes">
+        <form method="post" action="{% url 'financas:pedido_aceitar' p.pk %}">{% csrf_token %}
+          <button class="btn" type="submit">Aceitar</button>
+        </form>
+        <form method="post" action="{% url 'financas:pedido_recusar' p.pk %}">{% csrf_token %}
+          <button class="btn sec" type="submit">Recusar</button>
+        </form>
+      </div></td>
+    </tr>
+    {% empty %}<tr><td class="rotulo">Nenhum pedido pendente.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Pessoas da família</h2>
+  <p class="rotulo" style="margin-top:0">Todos aqui veem e lançam nas mesmas contas. Administradores aprovam pedidos e podem remover pessoas.</p>
+  <table>
+    <tr><th>Nome</th><th>Parentesco</th><th>Login</th><th>Papel</th>{% if pode_editar %}<th></th>{% endif %}</tr>
+    {% for m in membros %}
+    <tr>
+      <td>{{ m }}{% if m.usuario == user %} <span class="rotulo">(você)</span>{% endif %}</td>
+      <td>{{ m.parentesco|default:"—" }}</td>
+      <td>{{ m.usuario.username }}</td>
+      <td>{% if m.is_admin %}<span class="etiqueta">Administrador</span>{% else %}Membro{% endif %}</td>
+      {% if pode_editar %}
+      <td>
+        {% if m.usuario != user %}
+        <div class="acoes">
+          <form method="post" action="{% url 'financas:membro_admin' m.pk %}">{% csrf_token %}
+            <button class="btn sec" type="submit">{% if m.is_admin %}Tirar admin{% else %}Tornar admin{% endif %}</button>
+          </form>
+          <form method="post" action="{% url 'financas:membro_remover' m.pk %}"
+                onsubmit="return confirm('Remover {{ m|escapejs }} da família?')">{% csrf_token %}
+            <button class="btn perigo" type="submit">Remover</button>
+          </form>
+        </div>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if pode_editar %}
+<div class="card" style="max-width:480px">
+  <h2>Nome da família</h2>
+  <form method="post" class="linha">{% csrf_token %}
+    <p>{{ form_familia.nome }}</p>
+    <button class="btn" type="submit">Salvar</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

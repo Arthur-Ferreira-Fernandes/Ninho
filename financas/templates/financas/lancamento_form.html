@@ -1,0 +1,146 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}{% if item %}Editar {{ item.descricao }}{% else %}Novo lançamento{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}{% if voltar == 'contas' %}#contas{% elif voltar == 'cartoes' %}#cartoes{% else %}{% if base_data %}?mes={{ base_data|date:'Y-m' }}&dia={{ base_data|date:'Y-m-d' }}{% endif %}#extrato{% endif %}">← {{ conta.nome }}</a>
+
+<div class="fixa-layout">
+  <form method="post" novalidate id="form-lanc" class="card fixa-card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar lançamento{% else %}Novo lançamento{% endif %}</h2>
+    <p class="sub">Uma entrada ou saída pontual na conta <strong>{{ conta.nome }}</strong>, fora das contas fixas.</p>
+
+    <div class="alerta info dica">
+      <b>Gasto do dia a dia?</b> Mercado, transporte e lanches já saem do <em>dinheiro do dia</em>. Lance aqui só o que foge disso, como uma compra grande ou um dinheiro extra, para não contar duas vezes.
+    </div>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    <div class="modos tipos" role="radiogroup" aria-label="Tipo">
+      {% for radio in form.tipo %}
+      <label class="modo tipo-{{ radio.data.value }}">
+        {{ radio.tag }}
+        <span class="modo-corpo">
+          {% if radio.data.value == "saida" %}
+            <span class="modo-icone">↓</span><strong>Saída</strong><small>Dinheiro que saiu: compra, conserto, presente…</small>
+          {% else %}
+            <span class="modo-icone">↑</span><strong>Entrada</strong><small>Dinheiro que entrou: freela, reembolso, venda…</small>
+          {% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    {% for erro in form.tipo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+
+    {% with field=form.descricao %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="atalhos sugestoes" id="sugestoes" aria-label="Sugestões"></div>
+
+    <div class="campos-2">
+      {% with field=form.valor %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      <div>
+        {% with field=form.data %}{% include "financas/_campo.html" %}{% endwith %}
+        <div class="atalhos atalhos-data" id="atalhos-data" aria-label="Atalhos de data">
+          <button type="button" data-dias="0">Hoje</button>
+          <button type="button" data-dias="1">Ontem</button>
+          <button type="button" data-dias="2">Anteontem</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar lançamento{% endif %}</button>
+      <a class="btn sec" href="{% url 'financas:painel' conta.pk %}{% if voltar == 'contas' %}#contas{% elif voltar == 'cartoes' %}#cartoes{% else %}{% if base_data %}?mes={{ base_data|date:'Y-m' }}&dia={{ base_data|date:'Y-m-d' }}{% endif %}#extrato{% endif %}">Cancelar</a>
+    </div>
+  </form>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card" id="resumo">
+      <span class="rotulo">Resumo</span>
+      <div class="resumo-topo">
+        <span class="resumo-icone" id="r-icone">↓</span>
+        <div>
+          <strong id="r-nome">Novo lançamento</strong>
+          <small id="r-quando">—</small>
+        </div>
+      </div>
+      <div class="resumo-valor" id="r-valor">R$ 0,00</div>
+      <dl class="resumo-lista" id="r-efeito"{% if not base_data %} hidden{% endif %}>
+        <div><dt>Saldo esperado em <span id="r-dia-base">{{ base_data|date:"d/m" }}</span></dt><dd>{{ base_esperado|brl }}</dd></div>
+        <div><dt>Com este lançamento</dt><dd id="r-depois">—</dd></div>
+      </dl>
+      <p class="resumo-nota" id="r-nota">O saldo esperado muda a partir desse dia em diante.</p>
+    </div>
+    {% if excluir %}
+    <form method="post" action="{% url 'financas:item_excluir' excluir.0 excluir.1 %}"
+          onsubmit="return confirm('Excluir este lançamento?')">{% csrf_token %}
+      {% if voltar %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}
+      <button class="btn fantasma perigo-texto bloco" type="submit">Excluir lançamento</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("form-lanc");
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const SUGESTOES = {
+    saida: ["Compra grande", "Conserto", "Presente", "Médico", "Viagem", "Imposto", "Multa"],
+    entrada: ["Freela", "Reembolso", "Venda", "13º salário", "Bônus", "Restituição IR", "Pix recebido"],
+  };
+  const BASE = {% if base_data %}{ data: "{{ base_data|date:'Y-m-d' }}", esperado: {{ base_esperado|stringformat:'s' }} }{% else %}null{% endif %};
+  const desc = form.querySelector("[name=descricao]");
+  const valor = form.querySelector("[name=valor]");
+  const data = form.querySelector("[name=data]");
+
+  const tipo = () => (form.querySelector("[name=tipo]:checked") || {}).value || "saida";
+  const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const diasAtras = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
+
+  function sugestoes() {
+    const caixa = document.getElementById("sugestoes");
+    caixa.innerHTML = "";
+    SUGESTOES[tipo()].forEach((s) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = s;
+      b.classList.toggle("ativo", desc.value === s);
+      b.addEventListener("click", () => { desc.value = s; atualizar(); });
+      caixa.appendChild(b);
+    });
+  }
+
+  function atualizar() {
+    const t = tipo(), entrada = t === "entrada";
+    const v = parseFloat(String(valor.value).replace(",", ".")) || 0;
+    form.querySelectorAll(".modo").forEach((l) => l.classList.toggle("ativo", l.querySelector("input").checked));
+    form.querySelectorAll("#atalhos-data button").forEach((b) => b.classList.toggle("ativo", data.value === diasAtras(+b.dataset.dias)));
+
+    document.getElementById("resumo").classList.toggle("receita", entrada);
+    document.getElementById("r-icone").textContent = entrada ? "↑" : "↓";
+    document.getElementById("r-nome").textContent = desc.value.trim() || (entrada ? "Nova entrada" : "Nova saída");
+    const d = data.value ? new Date(data.value + "T12:00") : null;
+    document.getElementById("r-quando").textContent = d
+      ? d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }) : "Escolha a data";
+    document.getElementById("r-valor").textContent = (entrada ? "+ " : "− ") + brl.format(v);
+
+    // o efeito só é exato para o dia carregado; em outra data mostra só a variação
+    const efeito = document.getElementById("r-efeito");
+    const mesmoDia = BASE && data.value === BASE.data;
+    efeito.hidden = !mesmoDia;
+    document.getElementById("r-nota").textContent = mesmoDia || !d
+      ? "O saldo esperado muda a partir desse dia em diante."
+      : "A partir de " + d.toLocaleDateString("pt-BR") + ", o saldo esperado fica " + brl.format(v) + (entrada ? " maior." : " menor.");
+    if (mesmoDia) {
+      const depois = BASE.esperado + (entrada ? v : -v);
+      const el = document.getElementById("r-depois");
+      el.textContent = brl.format(depois);
+      el.classList.toggle("neg", depois < 0);
+    }
+    sugestoes();
+  }
+
+  form.querySelectorAll("#atalhos-data button").forEach((b) =>
+    b.addEventListener("click", () => { data.value = diasAtras(+b.dataset.dias); atualizar(); }));
+  form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

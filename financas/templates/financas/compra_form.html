@@ -1,0 +1,472 @@
+{% extends "financas/base.html" %}
+{% block titulo %}{% if item %}Editar {{ item.descricao }}{% else %}Compra no cartão{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}#cartoes">← {{ conta.nome }}</a>
+
+<div class="fixa-layout layout-impacto">
+  <form method="post" novalidate id="form-compra" class="card fixa-card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar compra no cartão{% else %}Compra no cartão de crédito{% endif %}</h2>
+    <p class="sub">À vista ou parcelada. Cada parcela entra na fatura certa, e o valor sai da conta <strong>{{ conta.nome }}</strong> no vencimento.</p>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    <div class="campo{% if form.cartao.errors %} com-erro{% endif %}">
+      <label>Cartão</label>
+      <div class="cartoes-opcoes" role="radiogroup" aria-label="Cartão">
+        {% for radio in form.cartao %}
+        <label class="cartao-opcao">
+          {{ radio.tag }}
+          <span class="cartao-corpo">
+            <span class="cartao-chip" aria-hidden="true"></span>
+            <strong>{{ radio.choice_label }}</strong>
+            {% for c in cartoes %}{% if c.pk|stringformat:"s" == radio.data.value|stringformat:"s" %}
+            <small>fecha dia {{ c.dia_fechamento }} · vence dia {{ c.dia_vencimento }}</small>
+            {% endif %}{% endfor %}
+          </span>
+        </label>
+        {% endfor %}
+        <a class="cartao-opcao cartao-novo" href="{% url 'financas:cartao_novo' conta.pk %}">+ Novo cartão</a>
+      </div>
+      {% for erro in form.cartao.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+    </div>
+
+    {% with field=form.descricao %}{% include "financas/_campo.html" %}{% endwith %}
+
+    <div class="campos-2">
+      {% with field=form.valor_total %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      {% with field=form.parcelas %}{% include "financas/_campo.html" with sufixo="x" %}{% endwith %}
+    </div>
+    <div class="atalhos" id="atalhos-parcelas" aria-label="Atalhos de parcelas">
+      <button type="button" data-n="1">À vista</button>
+      <button type="button" data-n="2">2x</button>
+      <button type="button" data-n="3">3x</button>
+      <button type="button" data-n="6">6x</button>
+      <button type="button" data-n="10">10x</button>
+      <button type="button" data-n="12">12x</button>
+    </div>
+
+    {% with field=form.data_compra %}{% include "financas/_campo.html" %}{% endwith %}
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Lançar compra{% endif %}</button>
+      <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#cartoes">Cancelar</a>
+    </div>
+  </form>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card" id="resumo">
+      <span class="rotulo">Resumo</span>
+      <div class="resumo-topo">
+        <span class="resumo-icone cartao-icone" aria-hidden="true">▭</span>
+        <div><strong id="r-nome">Nova compra</strong><small id="r-cartao">—</small></div>
+      </div>
+      <div class="resumo-valor" id="r-valor">R$ 0,00</div>
+      <p class="resumo-parcela" id="r-parcela"></p>
+    </div>
+
+    <div class="card impacto" id="impacto" aria-live="polite">
+      <div class="impacto-cab">
+        <h3>Impacto no orçamento</h3>
+        <span class="rotulo">próximos {{ projecao.meses }} meses</span>
+      </div>
+      <p class="impacto-vazio" id="i-vazio">Preencha cartão, valor e data para ver o impacto.</p>
+
+      <div id="i-conteudo" hidden>
+        <div class="alerta" id="i-alerta" hidden></div>
+
+        <div class="fechamentos">
+          <div class="fech-bloco">
+            <span class="rotulo" id="i-mes-rotulo">Este mês fecha com</span>
+            <b id="i-mes">—</b>
+            <small id="i-mes-antes"></small>
+          </div>
+          <div class="fech-bloco fech-cartao">
+            <span class="rotulo" id="i-fech-rotulo">No fechamento do cartão</span>
+            <dl>
+              <div><dt>Saldo no dia</dt><dd id="i-fech-saldo">—</dd></div>
+              <div><dt>Fatura fecha em</dt><dd id="i-fech-fatura">—</dd></div>
+              <div><dt id="i-fech-apos-rotulo">Depois de pagar</dt><dd id="i-fech-apos">—</dd></div>
+            </dl>
+            <small id="i-fech-nota"></small>
+          </div>
+        </div>
+        <dl class="impacto-numeros">
+          <div><dt>Parcela</dt><dd id="i-parcela">—</dd><small id="i-pct"></small></div>
+          <div><dt>Pior saldo</dt><dd id="i-pior">—</dd><small id="i-pior-antes"></small></div>
+        </dl>
+
+        <div class="mapa-impacto">
+          <div class="mi-cab">
+            <strong>Mapa do saldo com a compra</strong>
+            <span class="rotulo">cor = saldo esperado ao fim do dia</span>
+          </div>
+          <div class="mi-meses" id="mi-meses" role="group" aria-label="Meses da projeção"></div>
+          <nav class="mapa-nav mi-nav" aria-label="Mês do mapa">
+            <button type="button" class="btn fantasma" id="mi-ant" aria-label="Mês anterior">‹</button>
+            <strong id="mi-mes-nome">—</strong>
+            <button type="button" class="btn fantasma" id="mi-prox" aria-label="Próximo mês">›</button>
+          </nav>
+          <div class="mapa" id="mi-dias"></div>
+          <div class="mi-foco" id="mi-foco" aria-live="polite"></div>
+          <div class="legenda" aria-label="Legenda das cores">
+            <div class="legenda-faixa">
+              <span class="c-n4"></span><span class="c-n3"></span><span class="c-n2"></span><span class="c-n1"></span>
+              <span class="c-z"></span>
+              <span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span>
+            </div>
+            <div class="legenda-rotulos"><span id="mi-min">−</span><span>R$ 0</span><span id="mi-max">+</span></div>
+            <p class="legenda-nota"><span class="mi-marca-parcela"></span> vence parcela ·
+              <b class="mi-marca-alerta">!</b> fica negativo só por causa da compra · a mesma escala vale para todos os meses</p>
+          </div>
+        </div>
+
+        <div class="tabela-rolagem-x">
+          <table class="impacto-meses" aria-label="Parcelas e saldo de cada mês">
+            <thead><tr><th>Parcela</th><th>Vence</th><th class="num">Valor</th><th class="num">Mês fecha com</th></tr></thead>
+            <tbody id="i-linhas"></tbody>
+          </table>
+        </div>
+        <p class="resumo-nota" id="i-nota"></p>
+      </div>
+    </div>
+
+    {% if item %}
+    <form method="post" action="{% url 'financas:compra_excluir' item.pk %}"
+          onsubmit="return confirm('Excluir a compra {{ item.descricao|escapejs }} e todas as {{ item.parcelas }} parcelas?')">{% csrf_token %}
+      <button class="btn fantasma perigo-texto bloco" type="submit">Excluir compra</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+{{ cartoes_dados|json_script:"dados-cartoes" }}
+{{ projecao|json_script:"dados-projecao" }}
+<script>
+(function () {
+  const form = document.getElementById("form-compra");
+  const CARTOES = JSON.parse(document.getElementById("dados-cartoes").textContent);
+  const PROJ = JSON.parse(document.getElementById("dados-projecao").textContent);
+  const INICIO_CALC = new Date("{{ inicio_calculo }}T12:00");
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const reais = (c) => brl.format(c / 100);
+  const $ = (n) => form.querySelector("[name=" + n + "]");
+  const el = (id) => document.getElementById(id);
+
+  // projeção (sem a compra): um valor por dia a partir de PROJ.inicio
+  const P0 = new Date(PROJ.inicio + "T12:00");
+  const SEM = PROJ.centavos;
+  const DIA = 86400000;
+  const dataDoIndice = (i) => new Date(P0.getTime() + i * DIA);
+  const indiceDaData = (d) => Math.round((d - P0) / DIA);
+  const fmtCurta = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
+  // mesmas regras de financas/calculos.py
+  const diaNoMes = (ano, mes, dia) => new Date(ano, mes, Math.min(dia, new Date(ano, mes + 1, 0).getDate()), 12);
+  function primeiraFatura(c, compra) {
+    const fech = diaNoMes(compra.getFullYear(), compra.getMonth(), c.fechamento);
+    return compra < fech ? [compra.getFullYear(), compra.getMonth()] : [compra.getFullYear(), compra.getMonth() + 1];
+  }
+  function vencimento(c, ano, mes) {
+    return c.vencimento > c.fechamento ? diaNoMes(ano, mes, c.vencimento) : diaNoMes(ano, mes + 1, c.vencimento);
+  }
+  function valores(totalCentavos, n) {
+    const base = Math.floor(totalCentavos / n);
+    return [totalCentavos - base * (n - 1)].concat(Array(n - 1).fill(base));
+  }
+
+  function parcelasDoFormulario() {
+    const sel = form.querySelector("[name=cartao]:checked");
+    const cartao = sel && CARTOES.find((c) => String(c.id) === sel.value);
+    const total = Math.round((parseFloat(String($("valor_total").value).replace(",", ".")) || 0) * 100);
+    const n = Math.max(1, Math.min(48, parseInt($("parcelas").value, 10) || 1));
+    const data = $("data_compra").value ? new Date($("data_compra").value + "T12:00") : null;
+    if (!cartao || !data || !total) return { cartao, total, n, parcelas: null };
+    const [ano, mes] = primeiraFatura(cartao, data);
+    const vals = valores(total, n);
+    const parcelas = vals.map((v, i) => {
+      const ref = new Date(ano, mes + i, 1, 12);
+      const venc = vencimento(cartao, ref.getFullYear(), ref.getMonth());
+      const fechamento = diaNoMes(ref.getFullYear(), ref.getMonth(), cartao.fechamento);
+      return { numero: i + 1, valor: v, vencimento: venc, fechamento, conta: venc >= INICIO_CALC };
+    });
+    return { cartao, total, n, vals, parcelas };
+  }
+
+  // saldo com a compra: cada parcela tira o valor dela a partir do vencimento
+  function serieCom(parcelas) {
+    const delta = new Array(SEM.length + 1).fill(0);
+    let antes = 0;
+    parcelas.forEach((p) => {
+      if (!p.conta) return;
+      const i = indiceDaData(p.vencimento);
+      if (i <= 0) antes += p.valor;           // venceu antes da projeção: afeta tudo
+      else if (i < SEM.length) delta[i] += p.valor;
+    });
+    const com = []; let acum = antes;
+    for (let i = 0; i < SEM.length; i++) { acum += delta[i]; com.push(SEM[i] - acum); }
+    return com;
+  }
+
+  function minimo(serie) {
+    let mi = 0;
+    for (let i = 1; i < serie.length; i++) if (serie[i] < serie[mi]) mi = i;
+    return mi;
+  }
+
+  function fimDoMes(serie, data) {
+    const ultimo = new Date(data.getFullYear(), data.getMonth() + 1, 0, 12);
+    const i = indiceDaData(ultimo);
+    return i >= 0 && i < serie.length ? serie[i] : null;
+  }
+
+  // ---------- mapa de datas ----------
+  // escala divergente igual à do painel (financas/calculos.py: nivel_cor), mas com o
+  // máximo dos 24 meses, para a mesma cor valer o mesmo valor em qualquer mês
+  function nivelCor(v, maximo) {
+    if (!maximo || Math.abs(v) < maximo * 0.05) return "z";
+    const n = Math.min(4, Math.max(1, Math.ceil(Math.abs(v) / maximo * 4)));
+    return (v > 0 ? "p" : "n") + n;
+  }
+  const MESES = [];   // [{ano, mes, ini, fim}] índices da projeção em cada mês
+  for (let i = 0; i < SEM.length; i++) {
+    const d = dataDoIndice(i), ult = MESES[MESES.length - 1];
+    if (!ult || ult.mes !== d.getMonth()) MESES.push({ ano: d.getFullYear(), mes: d.getMonth(), ini: i, fim: i });
+    else ult.fim = i;
+  }
+  let mesAtual = 0, mesEscolhido = false, diaFoco = null, estado = null;
+
+  function textoMes(m, curto) {
+    const d = new Date(m.ano, m.mes, 1, 12);
+    return curto ? d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "") + "/" + String(m.ano).slice(2)
+                 : d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase());
+  }
+
+  function mostrarFoco(i) {
+    const caixa = el("mi-foco");
+    caixa.replaceChildren();
+    if (i == null || !estado) return;
+    diaFoco = i;
+    const { com, porDia } = estado;
+    const t = document.createElement("strong");
+    t.textContent = dataDoIndice(i).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })
+      .replace(/^./, (c) => c.toUpperCase());
+    caixa.appendChild(t);
+    const linha = (rotulo, valor, classe) => {
+      const d = document.createElement("div");
+      const r = document.createElement("span"); r.textContent = rotulo;
+      const b = document.createElement("b"); b.textContent = valor; if (classe) b.className = classe;
+      d.append(r, b); caixa.appendChild(d);
+    };
+    linha("Com a compra", reais(com[i]), com[i] < 0 ? "neg" : "");
+    linha("Sem a compra", reais(SEM[i]), SEM[i] < 0 ? "neg" : "");
+    if (com[i] !== SEM[i]) linha("Diferença", reais(com[i] - SEM[i]), "neg");
+    (porDia[i] || []).forEach((p) => linha("Vence parcela " + p.numero + "/" + estado.n, "− " + reais(p.valor), "neg"));
+    el("mi-dias").querySelectorAll(".mapa-dia").forEach((c) => c.classList.toggle("sel", +c.dataset.i === i));
+  }
+
+  function desenharMes() {
+    const { com, maximo, porDia, mesesComParcela } = estado;
+    const m = MESES[mesAtual];
+    el("mi-mes-nome").textContent = textoMes(m);
+    el("mi-ant").disabled = mesAtual === 0;
+    el("mi-prox").disabled = mesAtual === MESES.length - 1;
+    el("mi-meses").querySelectorAll("button").forEach((b, k) => b.classList.toggle("sel", k === mesAtual));
+
+    const grade = el("mi-dias");
+    grade.replaceChildren();
+    "STQQSSD".split("").forEach((l) => {
+      const s = document.createElement("span"); s.className = "mapa-semana"; s.textContent = l; s.setAttribute("aria-hidden", "true");
+      grade.appendChild(s);
+    });
+    const primeiro = new Date(m.ano, m.mes, 1, 12);
+    const vazios = (primeiro.getDay() + 6) % 7;          // semana começa na segunda
+    for (let k = 0; k < vazios; k++) { const v = document.createElement("span"); v.className = "mapa-vazio"; grade.appendChild(v); }
+    const diasNoMes = new Date(m.ano, m.mes + 1, 0).getDate();
+    for (let dia = 1; dia <= diasNoMes; dia++) {
+      const i = indiceDaData(new Date(m.ano, m.mes, dia, 12));
+      if (i < 0 || i >= SEM.length) {                    // antes de hoje ou além da projeção
+        const s = document.createElement("span"); s.className = "mapa-dia inativo"; s.textContent = dia;
+        grade.appendChild(s); continue;
+      }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.i = i;
+      b.className = "mapa-dia c-" + nivelCor(com[i], maximo);
+      if (porDia[i]) b.classList.add("tem-parcela");
+      const alerta = com[i] < 0 && SEM[i] >= 0;
+      if (alerta) b.classList.add("alerta-compra");
+      b.textContent = dia;
+      b.setAttribute("aria-label", dataDoIndice(i).toLocaleDateString("pt-BR", { day: "numeric", month: "long" }) +
+        ": com a compra " + reais(com[i]) + ", sem a compra " + reais(SEM[i]) + (porDia[i] ? ", vence parcela" : ""));
+      b.addEventListener("mouseenter", () => mostrarFoco(i));
+      b.addEventListener("focus", () => mostrarFoco(i));
+      b.addEventListener("click", () => mostrarFoco(i));
+      grade.appendChild(b);
+    }
+    // foco padrão: primeira parcela do mês, ou o primeiro dia disponível
+    const parcelasNoMes = Object.keys(porDia).map(Number).filter((i) => i >= m.ini && i <= m.fim);
+    mostrarFoco(diaFoco != null && diaFoco >= m.ini && diaFoco <= m.fim ? diaFoco : (parcelasNoMes[0] ?? m.ini));
+  }
+
+  function desenharMapa(com, parcelas, n) {
+    // referência da escala: um salário (tom mais forte = um salário ou mais na conta).
+    // Sem salário cadastrado, usa o percentil 90 dos valores.
+    const salarioCentavos = Math.round(PROJ.salario * 100);
+    const absolutos = SEM.concat(com).map(Math.abs).sort((a, b) => a - b);
+    const maximo = salarioCentavos > 0 ? salarioCentavos : (absolutos[Math.floor((absolutos.length - 1) * 0.9)] || 0);
+    const porDia = {};
+    parcelas.forEach((p) => {
+      if (!p.conta) return;
+      const i = indiceDaData(p.vencimento);
+      if (i >= 0 && i < SEM.length) (porDia[i] = porDia[i] || []).push(p);
+    });
+    estado = { com, maximo, porDia, n };
+    const ref = salarioCentavos > 0 ? " (1 salário)" : "";
+    el("mi-min").textContent = "−" + reais(maximo) + " ou menos";
+    el("mi-max").textContent = reais(maximo) + ref + " ou mais";
+
+    // faixa dos meses: cor do saldo no fim de cada mês
+    const faixa = el("mi-meses");
+    faixa.replaceChildren();
+    MESES.forEach((m, k) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      const temParcela = Object.keys(porDia).some((i) => i >= m.ini && i <= m.fim);
+      let negPorCompra = false;
+      for (let i = m.ini; i <= m.fim; i++) if (com[i] < 0 && SEM[i] >= 0) { negPorCompra = true; break; }
+      b.className = "mi-mes c-" + nivelCor(com[m.fim], maximo) + (temParcela ? " tem-parcela" : "") + (negPorCompra ? " alerta-compra" : "");
+      b.textContent = textoMes(m, true);
+      b.title = textoMes(m) + ": fecha com " + reais(com[m.fim]) + " (sem a compra " + reais(SEM[m.fim]) + ")";
+      b.addEventListener("click", () => { mesAtual = k; mesEscolhido = true; diaFoco = null; desenharMes(); });
+      faixa.appendChild(b);
+    });
+
+    // sem escolha da pessoa, abre no mês da primeira parcela
+    if (!mesEscolhido) {
+      const primeira = Object.keys(porDia).map(Number).sort((a, b) => a - b)[0];
+      mesAtual = primeira != null ? MESES.findIndex((m) => primeira >= m.ini && primeira <= m.fim) : 0;
+      diaFoco = null;
+    }
+    desenharMes();
+  }
+
+  el("mi-ant").addEventListener("click", () => { if (mesAtual > 0) { mesAtual--; mesEscolhido = true; diaFoco = null; desenharMes(); } });
+  el("mi-prox").addEventListener("click", () => { if (mesAtual < MESES.length - 1) { mesAtual++; mesEscolhido = true; diaFoco = null; desenharMes(); } });
+
+  // ---------- atualização ----------
+  function atualizar() {
+    const { cartao, total, n, vals, parcelas } = parcelasDoFormulario();
+
+    form.querySelectorAll(".cartao-opcao").forEach((l) => {
+      const i = l.querySelector("input"); l.classList.toggle("ativo", !!(i && i.checked));
+    });
+    form.querySelectorAll("#atalhos-parcelas button").forEach((b) => b.classList.toggle("ativo", +b.dataset.n === n));
+    el("r-nome").textContent = $("descricao").value.trim() || "Nova compra";
+    el("r-cartao").textContent = cartao ? cartao.nome : "Escolha o cartão";
+    el("r-valor").textContent = "− " + reais(total);
+    el("r-parcela").textContent = !total ? "" : n === 1 ? "À vista" :
+      n + "x de " + reais(valores(total, n)[n - 1]) + (valores(total, n)[0] !== valores(total, n)[n - 1] ? " (1ª de " + reais(valores(total, n)[0]) + ")" : "");
+
+    const tem = !!parcelas;
+    el("i-vazio").hidden = tem;
+    el("i-conteudo").hidden = !tem;
+    if (!tem) { estado = null; return; }
+
+    const com = serieCom(parcelas);
+    const parcela = vals[n - 1];
+
+    el("i-parcela").textContent = reais(parcela) + (n > 1 ? " × " + n : "");
+    el("i-pct").textContent = PROJ.salario > 0
+      ? (parcela / (PROJ.salario * 100) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "% do salário"
+      : "";
+    const mc = minimo(com), ms = minimo(SEM);
+    el("i-pior").textContent = reais(com[mc]);
+    el("i-pior").classList.toggle("neg", com[mc] < 0);
+    el("i-pior-antes").textContent = "em " + fmtCurta(dataDoIndice(mc)) + " · sem a compra: " + reais(SEM[ms]);
+
+    // alerta
+    const alerta = el("i-alerta");
+    const primeiroNeg = (s) => s.findIndex((v) => v < 0);
+    const negCom = primeiroNeg(com), negSem = primeiroNeg(SEM);
+    alerta.className = "alerta";
+    if (negCom >= 0 && (negSem < 0 || negCom < negSem)) {
+      alerta.classList.add("erro");
+      alerta.textContent = "Com esta compra a conta fica negativa a partir de " + fmtCurta(dataDoIndice(negCom)) +
+        (negSem < 0 ? "; sem ela, não ficaria nesse período." : " (sem ela, só em " + fmtCurta(dataDoIndice(negSem)) + ").");
+    } else if (negSem >= 0) {
+      alerta.classList.add("aviso-amarelo");
+      alerta.textContent = "A conta já fica negativa em " + fmtCurta(dataDoIndice(negSem)) + ", mesmo sem esta compra.";
+    } else {
+      alerta.classList.add("ok");
+      alerta.textContent = "A conta continua positiva nos próximos meses com esta compra.";
+    }
+    alerta.hidden = false;
+
+    // fim do mês atual
+    const mesNome = P0.toLocaleDateString("pt-BR", { month: "long" });
+    const fimMes = indiceDaData(new Date(P0.getFullYear(), P0.getMonth() + 1, 0, 12));
+    el("i-mes-rotulo").textContent = "Fim de " + mesNome + " (" + fmtCurta(dataDoIndice(fimMes)) + ")";
+    el("i-mes").textContent = reais(com[fimMes]);
+    el("i-mes").classList.toggle("neg", com[fimMes] < 0);
+    el("i-mes-antes").textContent = com[fimMes] === SEM[fimMes] ? "a compra não muda este mês"
+                                                                : "sem a compra: " + reais(SEM[fimMes]);
+
+    // próximo fechamento do cartão escolhido
+    let fech = diaNoMes(P0.getFullYear(), P0.getMonth(), cartao.fechamento), refMes = P0.getMonth();
+    if (fech < P0) { refMes += 1; fech = diaNoMes(P0.getFullYear(), refMes, cartao.fechamento); }
+    const venc = vencimento(cartao, P0.getFullYear(), refMes);
+    const chave = fech.getFullYear() + "-" + String(fech.getMonth() + 1).padStart(2, "0") + "-" + String(fech.getDate()).padStart(2, "0");
+    const baseFatura = ((PROJ.faturas[String(cartao.id)] || {})[chave]) || 0;
+    const naFatura = parcelas.filter((p) => p.conta && p.fechamento.getTime() === fech.getTime())
+                             .reduce((t, p) => t + p.valor, 0);
+    const iF = indiceDaData(fech), iV = indiceDaData(venc);
+    el("i-fech-rotulo").textContent = "Fechamento do " + cartao.nome + " · " + fmtCurta(fech);
+    el("i-fech-saldo").textContent = reais(com[iF]);
+    el("i-fech-saldo").classList.toggle("neg", com[iF] < 0);
+    el("i-fech-fatura").textContent = reais(baseFatura + naFatura);
+    el("i-fech-apos-rotulo").textContent = "Depois de pagar (" + fmtCurta(venc) + ")";
+    el("i-fech-apos").textContent = iV < com.length ? reais(com[iV]) : "—";
+    el("i-fech-apos").classList.toggle("neg", iV < com.length && com[iV] < 0);
+    const primeira = parcelas.find((p) => p.conta);
+    el("i-fech-nota").textContent = naFatura
+      ? "Inclui " + reais(naFatura) + " desta compra" + (baseFatura ? " + " + reais(baseFatura) + " já previstos." : ".")
+      : primeira ? "Esta compra entra na fatura seguinte (fecha " + fmtCurta(primeira.fechamento) + ")." : "";
+
+    // tabela mês a mês
+    const corpo = el("i-linhas");
+    corpo.replaceChildren();
+    let fora = 0, alem = 0;
+    parcelas.forEach((p) => {
+      const tr = document.createElement("tr");
+      const fimSem = fimDoMes(SEM, p.vencimento), fimCom = fimDoMes(com, p.vencimento);
+      if (!p.conta) { tr.className = "fora"; fora++; }
+      else if (fimCom === null) alem++;
+      const celula = (texto, classe) => {
+        const td = document.createElement("td"); td.textContent = texto; if (classe) td.className = classe; tr.appendChild(td); return td;
+      };
+      celula(p.numero + "/" + n);
+      celula(fmtCurta(p.vencimento));
+      celula(reais(p.valor), "num");
+      const td = celula("", "num");
+      if (p.conta && fimCom !== null) {
+        const s = document.createElement("span"); s.className = "antes"; s.textContent = reais(fimSem);
+        const b = document.createElement("b"); b.textContent = reais(fimCom); if (fimCom < 0) b.className = "neg";
+        td.append(s, " → ", b);
+      } else td.textContent = "—";
+      corpo.appendChild(tr);
+    });
+    const notas = [];
+    if (fora) notas.push(fora + (fora > 1 ? " parcelas vencem" : " parcela vence") + " antes do início do cálculo e não entra" + (fora > 1 ? "m" : "") + " no saldo.");
+    if (alem) notas.push(alem + (alem > 1 ? " parcelas ficam" : " parcela fica") + " além dos " + PROJ.meses + " meses do gráfico.");
+    el("i-nota").textContent = notas.join(" ");
+
+    desenharMapa(com, parcelas, n);
+  }
+
+  form.querySelectorAll("#atalhos-parcelas button").forEach((b) =>
+    b.addEventListener("click", () => { $("parcelas").value = b.dataset.n; atualizar(); }));
+  form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

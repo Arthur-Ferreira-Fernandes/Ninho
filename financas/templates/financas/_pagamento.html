@@ -1,0 +1,17 @@
+<div class="pagamento{% if f.DELETE.value %} removido{% endif %}">
+  {{ f.id }}
+  <div class="campo{% if f.dia.errors %} com-erro{% endif %}">
+    <label class="sr" for="{{ f.dia.id_for_label }}">Dia do mês</label>
+    <div class="campo-input com-prefixo"><span class="prefixo" aria-hidden="true">dia</span>{{ f.dia }}</div>
+    {% for e in f.dia.errors %}<p class="erro">{{ e }}</p>{% endfor %}
+  </div>
+  <div class="campo{% if f.valor.errors %} com-erro{% endif %}">
+    <label class="sr" for="{{ f.valor.id_for_label }}">Valor</label>
+    <div class="campo-input com-prefixo"><span class="prefixo" aria-hidden="true">R$</span>{{ f.valor }}</div>
+    {% for e in f.valor.errors %}<p class="erro">{{ e }}</p>{% endfor %}
+  </div>
+  <span hidden>{{ f.DELETE }}</span>
+  <button type="button" class="remover-pagamento" aria-label="Remover pagamento" title="Remover">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>
+  </button>
+</div>

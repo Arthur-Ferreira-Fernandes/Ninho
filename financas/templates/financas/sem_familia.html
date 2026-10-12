@@ -1,0 +1,52 @@
+{% extends "financas/auth_base.html" %}
+{% block titulo %}Sua família{% endblock %}
+{% block topo_direita %}
+  <span>{{ user.first_name|default:user.username }}</span>
+  <form method="post" action="{% url 'financas:sair' %}">{% csrf_token %}<button class="btn fantasma" type="submit">Sair</button></form>
+{% endblock %}
+{% block conteudo %}
+<ol class="passos">
+  <li class="feito">1. Sua conta</li>
+  <li class="atual">2. Sua família</li>
+  <li>3. Primeira conta</li>
+</ol>
+
+{% if pedido %}
+<div class="espera">
+  <div class="selo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+  <h2>Aguardando aprovação</h2>
+  <p class="sub">Você pediu para entrar na <strong>{{ pedido.familia }}</strong> em {{ pedido.criado_em|date:"d/m/Y \à\s H:i" }}.
+    Assim que um administrador aceitar, as contas da família aparecem para você.</p>
+  <div class="acoes-espera">
+    <a class="btn bloco" href="{% url 'financas:sem_familia' %}">Verificar de novo</a>
+    <form method="post" action="{% url 'financas:pedido_cancelar' %}">{% csrf_token %}
+      <button class="btn sec bloco" type="submit">Cancelar pedido</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<h2>Olá, {{ user.first_name|default:user.username }}!</h2>
+<p class="sub">Cada família tem o seu próprio espaço no {{ marca.nome }}. Entre na sua ou crie uma nova.</p>
+
+<div class="opcao">
+  <h3>Tenho um código de convite</h3>
+  <p>Peça o código para quem administra a família. Ele aprova seu pedido.</p>
+  <form method="post" novalidate>{% csrf_token %}
+    {% with field=form_entrar.codigo %}{% include "financas/_campo.html" with classe="campo-codigo" %}{% endwith %}
+    {% with field=form_entrar.parentesco %}{% include "financas/_campo.html" %}{% endwith %}
+    <button class="btn bloco" type="submit" name="entrar">Pedir para entrar</button>
+  </form>
+</div>
+
+<div class="divisor">ou</div>
+
+<div class="opcao">
+  <h3>Criar uma família nova</h3>
+  <p>Você será o administrador e receberá um código para convidar as pessoas.</p>
+  <form method="post" novalidate>{% csrf_token %}
+    {% for field in form_criar %}{% include "financas/_campo.html" %}{% endfor %}
+    <button class="btn sec bloco" type="submit" name="criar">Criar família</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

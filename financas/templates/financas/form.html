@@ -1,0 +1,18 @@
+{% extends "financas/base.html" %}
+{% block conteudo %}
+<div class="card" style="max-width:480px">
+  <h2>{{ titulo }}</h2>
+  <form method="post">{% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn" type="submit">Salvar</button>
+    {% if conta %}<a class="btn sec" href="{% url 'financas:painel' conta.pk %}">Cancelar</a>
+    {% elif voltar %}<a class="btn sec" href="{% url voltar %}">Cancelar</a>{% endif %}
+  </form>
+  {% if excluir %}
+  <form method="post" action="{% url 'financas:item_excluir' excluir.0 excluir.1 %}" style="margin-top:12px"
+        onsubmit="return confirm('Excluir mesmo?')">{% csrf_token %}
+    <button class="btn perigo" type="submit">Excluir</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

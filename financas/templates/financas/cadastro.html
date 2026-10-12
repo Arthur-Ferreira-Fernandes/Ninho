@@ -1,0 +1,21 @@
+{% extends "financas/auth_base.html" %}
+{% block titulo %}Criar conta{% endblock %}
+{% block topo_direita %}Já tem conta? <a class="btn sec" href="{% url 'financas:entrar' %}">Entrar</a>{% endblock %}
+{% block conteudo %}
+<ol class="passos">
+  <li class="atual">1. Sua conta</li>
+  <li>2. Sua família</li>
+  <li>3. Primeira conta</li>
+</ol>
+
+<h2>Crie sua conta</h2>
+<p class="sub">Leva menos de um minuto. Depois você cria sua família ou entra em uma com um código de convite.</p>
+
+<form method="post" novalidate>{% csrf_token %}
+  {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+  {% for field in form %}{% include "financas/_campo.html" %}{% endfor %}
+  <button class="btn bloco" type="submit">Criar minha conta</button>
+</form>
+
+<p class="auth-alternar">Já tem conta? <a href="{% url 'financas:entrar' %}">Entrar</a></p>
+{% endblock %}

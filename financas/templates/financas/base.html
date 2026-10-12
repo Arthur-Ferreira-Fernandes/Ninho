@@ -1,0 +1,26 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  {% include "financas/_head.html" %}
+  <title>{% block titulo %}{{ marca.nome }}{% endblock %}</title>
+</head>
+<body>
+  <header class="app-topo">
+    <a class="logo" href="{% url 'financas:inicio' %}"><img src="{% static 'financas/img/logo.svg' %}" alt=""><span>{{ marca.nome }}</span></a>
+    {% if user.is_authenticated %}
+      {% if user.membro %}<a class="tenant" href="{% url 'financas:familia' %}" title="Configurações da família"><i></i>{{ user.membro.familia }}</a>{% endif %}
+      <div class="app-usuario">
+        <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
+        <span>{{ user.first_name|default:user.username }}</span>
+        <form method="post" action="{% url 'financas:sair' %}">{% csrf_token %}
+          <button class="btn fantasma" type="submit">Sair</button>
+        </form>
+      </div>
+    {% endif %}
+  </header>
+  <main>
+    {% for m in messages %}<div class="aviso {{ m.tags }}">{{ m }}</div>{% endfor %}
+    {% block conteudo %}{% endblock %}
+  </main>
+</body>
+</html>

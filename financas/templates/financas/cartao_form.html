@@ -1,0 +1,75 @@
+{% extends "financas/base.html" %}
+{% block titulo %}{% if item %}Editar {{ item.nome }}{% else %}Novo cartão{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}#cartoes">← {{ conta.nome }}</a>
+
+<div class="fixa-layout">
+  <form method="post" novalidate id="form-cartao" class="card fixa-card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar cartão{% else %}Novo cartão de crédito{% endif %}</h2>
+    <p class="sub">A fatura deste cartão é paga pela conta <strong>{{ conta.nome }}</strong>, no dia do vencimento.</p>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="campos-2">
+      {% with field=form.dia_fechamento %}{% include "financas/_campo.html" with prefixo="dia" %}{% endwith %}
+      {% with field=form.dia_vencimento %}{% include "financas/_campo.html" with prefixo="dia" %}{% endwith %}
+    </div>
+    <p class="ajuda">Os dois aparecem na fatura ou no app do banco. Em meses mais curtos, dias 29 a 31 viram o último dia do mês.</p>
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar cartão{% endif %}</button>
+      <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#cartoes">Cancelar</a>
+    </div>
+  </form>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card" id="resumo-cartao">
+      <span class="rotulo">Como fica</span>
+      <div class="resumo-topo">
+        <span class="resumo-icone cartao-icone" aria-hidden="true">▭</span>
+        <div><strong id="c-nome">Novo cartão</strong><small id="c-dias">—</small></div>
+      </div>
+      <dl class="resumo-lista">
+        <div><dt>Melhor dia de compra</dt><dd id="c-melhor">—</dd></div>
+      </dl>
+      <p class="resumo-nota" id="c-exemplo">Preencha o fechamento e o vencimento.</p>
+    </div>
+    {% if item %}
+    <form method="post" action="{% url 'financas:cartao_excluir' item.pk %}"
+          onsubmit="return confirm('Excluir o cartão {{ item.nome|escapejs }}? Todas as compras dele também serão excluídas.')">{% csrf_token %}
+      <button class="btn fantasma perigo-texto bloco" type="submit">Excluir cartão</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("form-cartao");
+  const $ = (n) => form.querySelector("[name=" + n + "]");
+  const diaNoMes = (ano, mes, dia) => new Date(ano, mes, Math.min(dia, new Date(ano, mes + 1, 0).getDate()));
+  const fmt = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+  function vencimentoDaFatura(ano, mes, fech, venc) {
+    return venc > fech ? diaNoMes(ano, mes, venc) : diaNoMes(ano, mes + 1, venc);
+  }
+
+  function atualizar() {
+    const fech = +$("dia_fechamento").value, venc = +$("dia_vencimento").value;
+    document.getElementById("c-nome").textContent = $("nome").value.trim() || "Novo cartão";
+    const ok = fech >= 1 && fech <= 31 && venc >= 1 && venc <= 31;
+    document.getElementById("c-dias").textContent = ok ? "Fecha dia " + fech + " · vence dia " + venc : "—";
+    document.getElementById("c-melhor").textContent = ok ? "dia " + fech : "—";
+    if (!ok) { document.getElementById("c-exemplo").textContent = "Preencha o fechamento e o vencimento."; return; }
+    const hoje = new Date(), ano = hoje.getFullYear(), mes = hoje.getMonth();
+    const v1 = vencimentoDaFatura(ano, mes, fech, venc), v2 = vencimentoDaFatura(ano, mes + 1, fech, venc);
+    const ultimoAntes = fech > 1 ? "até o dia " + (fech - 1) : "no mês anterior";
+    document.getElementById("c-exemplo").textContent =
+      "Compras " + ultimoAntes + " entram na fatura que vence em " + fmt(v1) +
+      ". A partir do dia " + fech + ", na que vence em " + fmt(v2) + ".";
+  }
+  form.addEventListener("input", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

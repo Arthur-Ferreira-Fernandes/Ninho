@@ -1,0 +1,51 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+  {% include "financas/_head.html" %}
+  <title>{% block titulo %}{{ marca.nome }}{% endblock %} · {{ marca.nome }}</title>
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-marca">
+    <a class="logo" href="{% url 'financas:inicio' %}"><img src="{% static 'financas/img/logo.svg' %}" alt=""><span>{{ marca.nome }}</span></a>
+
+    <div class="auth-marca-conteudo">
+      <h1>As finanças da família, <em>no mesmo ninho.</em></h1>
+      <p class="lead">{{ marca.descricao }}</p>
+
+      <ul class="beneficios">
+        <li><span class="icone"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-4 3 3 5-6"/></svg></span>
+          <span><strong>Saldo esperado x real.</strong> Saiba no mesmo dia se o mês está saindo do planejado.</span></li>
+        <li><span class="icone"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></span>
+          <span><strong>Contas fixas no automático.</strong> Aluguel, salário e boletos entram sozinhos no cálculo.</span></li>
+        <li><span class="icone"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="5" r="2.5"/><circle cx="11.5" cy="6" r="2"/><path d="M1.5 14c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4M10.5 10.2c2 0 4 1.2 4 3.8"/></svg></span>
+          <span><strong>Cada família no seu espaço.</strong> Convide quem mora com você; os dados ficam só entre vocês.</span></li>
+      </ul>
+
+      <div class="amostra" aria-hidden="true">
+        <div class="amostra-topo"><strong>Conta conjunta</strong><span class="amostra-familia">Família Silva</span></div>
+        <div class="amostra-linhas">
+          <div class="amostra-linha"><span>Deveria ter hoje</span><b>R$ 3.480,00</b></div>
+          <div class="amostra-linha"><span>Saldo real</span><b>R$ 3.612,40</b></div>
+        </div>
+        <div class="amostra-barra"><i></i></div>
+        <div class="amostra-rodape">▲ R$ 132,40 dentro do planejado</div>
+      </div>
+    </div>
+
+    <div class="auth-marca-rodape">© {% now "Y" %} {{ marca.nome }} · {{ marca.slogan }}</div>
+  </aside>
+
+  <section class="auth-form">
+    <div class="auth-form-topo">
+      <a class="logo" href="{% url 'financas:inicio' %}"><img src="{% static 'financas/img/logo.svg' %}" alt=""><span>{{ marca.nome }}</span></a>
+      {% block topo_direita %}{% endblock %}
+    </div>
+    <div class="auth-caixa">
+      {% for m in messages %}<div class="alerta {% if m.tags == 'error' %}erro{% else %}ok{% endif %}">{{ m }}</div>{% endfor %}
+      {% block conteudo %}{% endblock %}
+    </div>
+  </section>
+</div>
+</body>
+</html>

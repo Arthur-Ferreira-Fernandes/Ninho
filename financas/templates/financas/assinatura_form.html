@@ -1,0 +1,145 @@
+{% extends "financas/base.html" %}
+{% block titulo %}{% if item %}Editar {{ item.descricao }}{% else %}Nova assinatura{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}#contas">← {{ conta.nome }}</a>
+
+<div class="fixa-layout">
+  <form method="post" novalidate id="form-assinatura" class="card fixa-card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar assinatura{% else %}Assinatura no cartão{% endif %}</h2>
+    <p class="sub">Uma cobrança que se repete todo mês no cartão, como streaming, música ou academia. Cada cobrança entra na fatura certa.</p>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    <div class="campo{% if form.cartao.errors %} com-erro{% endif %}">
+      <label>Cartão</label>
+      <div class="cartoes-opcoes" role="radiogroup" aria-label="Cartão">
+        {% for radio in form.cartao %}
+        <label class="cartao-opcao">
+          {{ radio.tag }}
+          <span class="cartao-corpo">
+            <span class="cartao-chip" aria-hidden="true"></span>
+            <strong>{{ radio.choice_label }}</strong>
+            {% for c in cartoes %}{% if c.pk|stringformat:"s" == radio.data.value|stringformat:"s" %}
+            <small>fecha dia {{ c.dia_fechamento }} · vence dia {{ c.dia_vencimento }}</small>
+            {% endif %}{% endfor %}
+          </span>
+        </label>
+        {% endfor %}
+        <a class="cartao-opcao cartao-novo" href="{% url 'financas:cartao_novo' conta.pk %}?proximo=assinatura">+ Novo cartão</a>
+      </div>
+      {% for erro in form.cartao.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+    </div>
+
+    {% with field=form.descricao %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="atalhos sugestoes" id="sugestoes" aria-label="Sugestões">
+    </div>
+
+    <div class="campos-2">
+      {% with field=form.valor %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      {% with field=form.dia_cobranca %}{% include "financas/_campo.html" with prefixo="dia" %}{% endwith %}
+    </div>
+    <div class="campos-2">
+      {% with field=form.inicio %}{% include "financas/_campo.html" %}{% endwith %}
+      {% with field=form.fim %}{% include "financas/_campo.html" %}{% endwith %}
+    </div>
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar assinatura{% endif %}</button>
+      <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#contas">Cancelar</a>
+    </div>
+  </form>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card" id="resumo">
+      <span class="rotulo">Resumo</span>
+      <div class="resumo-topo">
+        <span class="resumo-icone" aria-hidden="true">↻</span>
+        <div><strong id="r-nome">Nova assinatura</strong><small id="r-cartao">—</small></div>
+      </div>
+      <div class="resumo-valor" id="r-valor">R$ 0,00</div>
+      <p class="resumo-parcela" id="r-ano"></p>
+      <dl class="resumo-lista" id="r-proximas" hidden></dl>
+      <p class="resumo-nota" id="r-nota"></p>
+    </div>
+    {% if item %}
+    <form method="post" action="{% url 'financas:assinatura_excluir' item.pk %}"
+          onsubmit="return confirm('Excluir a assinatura {{ item.descricao|escapejs }}? Ela some também dos meses passados. Para cancelar daqui pra frente, use a data de cancelamento.')">{% csrf_token %}
+      <button class="btn fantasma perigo-texto bloco" type="submit">Excluir assinatura</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+{{ cartoes_dados|json_script:"dados-cartoes" }}
+<script>
+(function () {
+  const form = document.getElementById("form-assinatura");
+  const CARTOES = JSON.parse(document.getElementById("dados-cartoes").textContent);
+  const SUGESTOES = ["Netflix", "Spotify", "Disney+", "Prime Video", "YouTube Premium", "Max", "iCloud", "Academia"];
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const $ = (n) => form.querySelector("[name=" + n + "]");
+  const el = (id) => document.getElementById(id);
+  const fmt = (d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
+  // mesmas regras de financas/calculos.py
+  const diaNoMes = (ano, mes, dia) => new Date(ano, mes, Math.min(dia, new Date(ano, mes + 1, 0).getDate()), 12);
+  function vencimentoDaCobranca(c, data) {
+    const fech = diaNoMes(data.getFullYear(), data.getMonth(), c.fechamento);
+    const ref = data < fech ? new Date(data.getFullYear(), data.getMonth(), 1, 12) : new Date(data.getFullYear(), data.getMonth() + 1, 1, 12);
+    return c.vencimento > c.fechamento ? diaNoMes(ref.getFullYear(), ref.getMonth(), c.vencimento)
+                                       : diaNoMes(ref.getFullYear(), ref.getMonth() + 1, c.vencimento);
+  }
+
+  const caixa = el("sugestoes");
+  caixa.replaceChildren();
+  SUGESTOES.forEach((s) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = s;
+    b.addEventListener("click", () => { $("descricao").value = s; atualizar(); });
+    caixa.appendChild(b);
+  });
+
+  function atualizar() {
+    const sel = form.querySelector("[name=cartao]:checked");
+    const cartao = sel && CARTOES.find((c) => String(c.id) === sel.value);
+    const valor = parseFloat(String($("valor").value).replace(",", ".")) || 0;
+    const dia = parseInt($("dia_cobranca").value, 10);
+    const inicio = $("inicio").value ? new Date($("inicio").value + "T12:00") : null;
+    const fim = $("fim").value ? new Date($("fim").value + "T12:00") : null;
+
+    form.querySelectorAll(".cartao-opcao").forEach((l) => {
+      const i = l.querySelector("input"); l.classList.toggle("ativo", !!(i && i.checked));
+    });
+    caixa.querySelectorAll("button").forEach((b) => b.classList.toggle("ativo", b.textContent === $("descricao").value));
+    el("r-nome").textContent = $("descricao").value.trim() || "Nova assinatura";
+    el("r-cartao").textContent = cartao ? cartao.nome + (dia ? " · todo dia " + dia : "") : "Escolha o cartão";
+    el("r-valor").textContent = "− " + brl.format(valor) + "/mês";
+    el("r-ano").textContent = valor ? brl.format(valor * 12) + " por ano" : "";
+
+    const lista = el("r-proximas");
+    lista.replaceChildren();
+    if (!cartao || !dia || dia < 1 || dia > 31 || !inicio || !valor) {
+      lista.hidden = true;
+      el("r-nota").textContent = "Preencha cartão, valor, dia e início para ver as próximas cobranças.";
+      return;
+    }
+    const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+    const desde = inicio > hoje ? inicio : hoje;
+    let ano = desde.getFullYear(), mes = desde.getMonth(), achadas = 0;
+    for (let k = 0; k < 14 && achadas < 3; k++, mes++) {
+      const data = diaNoMes(ano, mes, dia);
+      if (data < desde || data < inicio || (fim && data >= fim)) continue;
+      const linha = document.createElement("div");
+      const dt = document.createElement("dt"); dt.textContent = "Cobra em " + fmt(data);
+      const dd = document.createElement("dd"); dd.textContent = "fatura de " + fmt(vencimentoDaCobranca(cartao, data));
+      linha.append(dt, dd); lista.appendChild(linha); achadas++;
+    }
+    lista.hidden = !achadas;
+    el("r-nota").textContent = achadas ? "O valor sai da conta no vencimento de cada fatura."
+                                       : "Nenhuma cobrança daqui pra frente (a assinatura já foi cancelada).";
+  }
+  form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

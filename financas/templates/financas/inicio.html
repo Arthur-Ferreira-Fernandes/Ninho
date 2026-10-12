@@ -1,0 +1,7 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block conteudo %}
+<div class="topo"><h1>Contas</h1><a class="btn" href="{% url 'financas:conta_nova' %}">+ Nova conta</a></div>
+<div class="card"><table>
+  {% for c in contas %}<tr><td><a href="{% url 'financas:painel' c.pk %}">{{ c.nome }}</a></td></tr>{% endfor %}
+</table></div>
+{% endblock %}

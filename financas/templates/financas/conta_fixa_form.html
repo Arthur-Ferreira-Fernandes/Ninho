@@ -1,0 +1,174 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}{% if item %}Editar {{ item.nome }}{% else %}Nova conta fixa{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% if url_voltar %}{{ url_voltar }}{% else %}{% url 'financas:painel' conta.pk %}#contas{% endif %}">← {{ conta.nome }}</a>
+
+<div class="fixa-layout">
+  <form method="post" novalidate id="form-fixa" class="card fixa-card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar conta fixa{% else %}Nova conta fixa{% endif %}</h2>
+    <p class="sub">Algo que se repete todo mês na conta <strong>{{ conta.nome }}</strong> e entra no cálculo do saldo esperado.</p>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    {% if form.tipo %}
+    <div class="modos tipos" role="radiogroup" aria-label="Tipo">
+      {% for radio in form.tipo %}
+      <label class="modo tipo-{{ radio.data.value }}">
+        {{ radio.tag }}
+        <span class="modo-corpo">
+          {% if radio.data.value == "despesa" %}
+            <span class="modo-icone">↓</span><strong>Despesa</strong><small>Sai todo mês: aluguel, internet, escola…</small>
+          {% else %}
+            <span class="modo-icone">↑</span><strong>Receita</strong><small>Entra todo mês: pensão, aluguel recebido…</small>
+          {% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    {% for erro in form.tipo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+    {% else %}
+    <div class="alerta info">Este é um pagamento do <strong>salário</strong>. Para mudar os pagamentos do salário, use <a href="{% url 'financas:conta_editar' conta.pk %}">Configurar conta</a>.</div>
+    {% endif %}
+
+    {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="atalhos sugestoes" id="sugestoes" aria-label="Sugestões"></div>
+
+    {% if form.variavel %}
+    <label class="interruptor">
+      {{ form.variavel }}
+      <span class="interruptor-trilho" aria-hidden="true"></span>
+      <span><strong>{{ form.variavel.label }}</strong><small>{{ form.variavel.help_text }}</small></span>
+    </label>
+    {% endif %}
+
+    {% with field=form.valor %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+    {% if media_pagamentos %}
+    <div class="media-pagamentos" id="media-pagamentos">
+      <div>
+        <strong>Média dos últimos {{ ultimos_pagamentos|length }} pagamento{{ ultimos_pagamentos|length|pluralize }}: {{ media_pagamentos|brl }}</strong>
+        <small>{% for p in ultimos_pagamentos %}{{ p.referencia|date:"m/y" }}: {{ p.valor|brl }}{% if not forloop.last %} · {% endif %}{% endfor %}</small>
+      </div>
+      <button type="button" class="btn sec" data-media="{{ media_pagamentos|stringformat:'s' }}">Usar como estimativa</button>
+    </div>
+    {% endif %}
+
+    <div class="campo{% if form.dia.errors %} com-erro{% endif %}">
+      <label>Dia do mês</label>
+      <div class="dias" role="radiogroup" aria-label="Dia do mês">
+        {% for radio in form.dia %}
+        <label class="dia">{{ radio.tag }}<span>{{ radio.choice_label }}</span></label>
+        {% endfor %}
+      </div>
+      {% for erro in form.dia.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+      <p class="ajuda">Dias 29, 30 e 31: nos meses mais curtos, cai no último dia do mês.</p>
+    </div>
+
+    {% if form.ativa %}
+    <label class="interruptor">
+      {{ form.ativa }}
+      <span class="interruptor-trilho" aria-hidden="true"></span>
+      <span><strong>Ativa</strong><small>{{ form.ativa.help_text }}</small></span>
+    </label>
+    {% endif %}
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar conta fixa{% endif %}</button>
+      <a class="btn sec" href="{% if url_voltar %}{{ url_voltar }}{% else %}{% url 'financas:painel' conta.pk %}#contas{% endif %}">Cancelar</a>
+    </div>
+  </form>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card" id="resumo">
+      <span class="rotulo">Resumo</span>
+      <div class="resumo-topo">
+        <span class="resumo-icone" id="r-icone">↓</span>
+        <div>
+          <strong id="r-nome">Nova conta fixa</strong>
+          <small id="r-quando">Escolha o dia do mês</small>
+        </div>
+      </div>
+      <div class="resumo-valor" id="r-valor">R$ 0,00</div>
+      <dl class="resumo-lista">
+        <div><dt>Próxima vez</dt><dd id="r-proxima">—</dd></div>
+        <div><dt>Em 12 meses</dt><dd id="r-ano">—</dd></div>
+        <div><dt>Equivale por dia</dt><dd id="r-dia">—</dd></div>
+      </dl>
+    </div>
+    {% if excluir %}
+    <form method="post" action="{% url 'financas:item_excluir' excluir.0 excluir.1 %}"
+          onsubmit="return confirm('Excluir {{ item.nome|escapejs }}? Ela sai de todos os meses, inclusive dos que já passaram.')">{% csrf_token %}
+      {% if voltar %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}
+      <button class="btn fantasma perigo-texto bloco" type="submit">Excluir conta fixa</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("form-fixa");
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const SUGESTOES = {
+    despesa: ["Aluguel", "Condomínio", "Luz", "Água", "Gás", "Mercado", "Internet", "Celular", "Plano de saúde", "Escola"],
+    receita: ["Aluguel recebido", "Pensão", "Freela fixo", "Rendimentos", "Mesada"],
+  };
+  const tipoFixo = {{ item.salario|yesno:"true,false" }} ? "receita" : null;
+  const nome = form.querySelector("[name=nome]");
+  const valor = form.querySelector("[name=valor]");
+
+  const tipo = () => tipoFixo || (form.querySelector("[name=tipo]:checked") || {}).value || "despesa";
+  const dia = () => +((form.querySelector("[name=dia]:checked") || {}).value || 0);
+
+  function proxima(d) {
+    // mesma regra do painel: a partir de amanhã, dia limitado ao tamanho do mês
+    const amanha = new Date(); amanha.setHours(0, 0, 0, 0); amanha.setDate(amanha.getDate() + 1);
+    for (let i = 0; i < 2; i++) {
+      const ano = amanha.getFullYear(), mes = amanha.getMonth() + i;
+      const ultimo = new Date(ano, mes + 1, 0).getDate();
+      const data = new Date(ano, mes, Math.min(d, ultimo));
+      if (data >= amanha) return data;
+    }
+  }
+
+  function desenharSugestoes() {
+    const caixa = document.getElementById("sugestoes");
+    caixa.innerHTML = "";
+    SUGESTOES[tipo()].forEach((s) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = s;
+      b.classList.toggle("ativo", nome.value === s);
+      b.addEventListener("click", () => { nome.value = s; atualizar(); });
+      caixa.appendChild(b);
+    });
+  }
+
+  const variavel = form.querySelector("[name=variavel]");
+  const rotuloValor = form.querySelector("label[for=id_valor]");
+  const botaoMedia = form.querySelector("[data-media]");
+  if (botaoMedia) botaoMedia.addEventListener("click", () => { valor.value = botaoMedia.dataset.media; atualizar(); });
+
+  function atualizar() {
+    const ehVariavel = !!(variavel && variavel.checked);
+    if (rotuloValor) rotuloValor.firstChild.textContent = ehVariavel ? "Valor estimado (por mês) " : "Valor ";
+    const t = tipo(), d = dia();
+    const v = parseFloat(String(valor.value).replace(",", ".")) || 0;
+    form.querySelectorAll(".modo").forEach((l) => l.classList.toggle("ativo", l.querySelector("input").checked));
+    const resumo = document.getElementById("resumo");
+    resumo.classList.toggle("receita", t === "receita");
+    document.getElementById("r-icone").textContent = t === "receita" ? "↑" : "↓";
+    document.getElementById("r-nome").textContent = nome.value.trim() || (t === "receita" ? "Nova receita" : "Nova despesa");
+    document.getElementById("r-quando").textContent = d ? "Todo dia " + d + " do mês" : "Escolha o dia do mês";
+    document.getElementById("r-valor").textContent = (ehVariavel ? "≈ " : "") + (t === "receita" ? "+ " : "− ") + brl.format(v);
+    const p = d ? proxima(d) : null;
+    document.getElementById("r-proxima").textContent = p
+      ? p.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "long" }) : "—";
+    document.getElementById("r-ano").textContent = v ? brl.format(v * 12) : "—";
+    document.getElementById("r-dia").textContent = v ? brl.format(v * 12 / 365) : "—";
+    desenharSugestoes();
+  }
+
+  form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,274 @@
+{% extends base_template %}
+{% block titulo %}{% if conta %}Editar {{ conta }}{% else %}Nova conta{% endif %}{% endblock %}
+{% block topo_direita %}
+  <span>{{ user.first_name|default:user.username }}</span>
+  <form method="post" action="{% url 'financas:sair' %}">{% csrf_token %}<button class="btn fantasma" type="submit">Sair</button></form>
+{% endblock %}
+{% block conteudo %}
+<div class="{% if not primeira %}card conta-form-card{% endif %}">
+  {% if primeira %}
+  <ol class="passos">
+    <li class="feito">1. Sua conta</li>
+    <li class="feito">2. Sua família</li>
+    <li class="atual">3. Primeira conta</li>
+  </ol>
+  <h2 class="titulo-form">Cadastre sua primeira conta</h2>
+  <p class="sub">Com o saldo de hoje e quanto pode gastar no dia a dia, o {{ marca.nome }} calcula quanto você deveria ter em qualquer data.</p>
+  {% else %}
+  <h2 class="titulo-form">{% if conta %}Configurar {{ conta }}{% else %}Nova conta{% endif %}</h2>
+  <p class="sub">{% if conta %}Mudanças no orçamento valem para todo o período, desde a data de início.{% else %}Adicione outra conta da {{ user.membro.familia }}.{% endif %}</p>
+  {% endif %}
+
+  <form method="post" novalidate id="form-conta">{% csrf_token %}
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    <fieldset class="secao">
+      <legend>A conta</legend>
+      {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
+      <div class="campos-2">
+        {% with field=form.saldo_inicial %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+        {% with field=form.data_inicio %}{% include "financas/_campo.html" %}{% endwith %}
+      </div>
+    </fieldset>
+
+    <fieldset class="secao" id="secao-salario">
+      <legend>Sua renda</legend>
+      <p class="ajuda-secao">Informe em que dias do mês o salário cai e quanto em cada um (ex.: adiantamento no dia 15 e o restante no dia 30). Cada pagamento entra como receita fixa.</p>
+
+      {{ pagamentos.management_form }}
+      {% for erro in pagamentos.non_form_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+      <div class="pagamentos" id="pagamentos">
+        <div class="pagamento-cab" aria-hidden="true"><span>Dia do mês</span><span>Valor</span><span></span></div>
+        {% for f in pagamentos %}
+          {% include "financas/_pagamento.html" with f=f %}
+        {% endfor %}
+      </div>
+      <template id="pagamento-modelo">{% include "financas/_pagamento.html" with f=pagamentos.empty_form %}</template>
+
+      <button type="button" class="btn-adicionar" id="add-pagamento">+ Adicionar pagamento</button>
+
+      <div class="total-salario" id="total-salario" hidden>
+        <span>Salário mensal</span><b id="total-salario-valor">R$ 0,00</b>
+      </div>
+    </fieldset>
+
+    <fieldset class="secao">
+      <legend>Gasto do dia a dia</legend>
+      <p class="ajuda-secao">Defina quanto pode sair por mês com mercado, transporte, lazer… O valor diário é calculado dividindo pelos dias de cada mês.</p>
+
+      <div class="modos" role="radiogroup" aria-label="{{ form.modo_gasto.label }}">
+        {% for radio in form.modo_gasto %}
+        <label class="modo">
+          {{ radio.tag }}
+          <span class="modo-corpo">
+            {% if radio.data.value == "percentual" %}
+              <span class="modo-icone">%</span>
+              <strong>% do salário</strong>
+              <small>Ex.: 30% do que você recebe</small>
+            {% else %}
+              <span class="modo-icone">R$</span>
+              <strong>Valor fixo por mês</strong>
+              <small>Ex.: R$ 1.500 todo mês</small>
+            {% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      {% for erro in form.modo_gasto.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+
+      <div class="painel-modo" data-modo="percentual">
+        {% with field=form.percentual_gasto %}{% include "financas/_campo.html" with sufixo="%" obrigatorio=True %}{% endwith %}
+        <input type="range" id="pct-slider" min="0" max="100" step="1" aria-label="Porcentagem do salário">
+        <div class="atalhos">
+          <button type="button" data-pct="10">10%</button>
+          <button type="button" data-pct="20">20%</button>
+          <button type="button" data-pct="30">30%</button>
+          <button type="button" data-pct="40">40%</button>
+          <button type="button" data-pct="50">50%</button>
+        </div>
+      </div>
+
+      <div class="painel-modo" data-modo="mensal">
+        {% with field=form.gasto_mensal %}{% include "financas/_campo.html" with prefixo="R$" obrigatorio=True %}{% endwith %}
+      </div>
+
+      <div class="previa" id="previa" aria-live="polite">
+        <div class="previa-vazia">Preencha acima para ver quanto pode gastar por dia.</div>
+        <div class="previa-valor">
+          <span class="rotulo">Você pode gastar</span>
+          <div><b id="previa-dia">R$ 0,00</b> <span>por dia</span></div>
+          <p id="previa-detalhe"></p>
+          <p id="previa-sobra" class="previa-sobra"></p>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="secao" id="guardar">
+      <legend>Guardar todo mês</legend>
+      <p class="ajuda-secao">Separe um valor para guardar. Ele entra como uma conta recorrente e sai da conta todo mês no <strong>dia de maior saldo</strong> daquele mês.</p>
+
+      <div class="modos modos-3" role="radiogroup" aria-label="{{ form.guardar_modo.label }}">
+        {% for radio in form.guardar_modo %}
+        <label class="modo">
+          {{ radio.tag }}
+          <span class="modo-corpo">
+            {% if radio.data.value == "nada" %}<span class="modo-icone">—</span><strong>Não guardar</strong><small>Por enquanto, nada</small>
+            {% elif radio.data.value == "percentual" %}<span class="modo-icone">%</span><strong>% do salário</strong><small>Ex.: 10% do que entra</small>
+            {% else %}<span class="modo-icone">R$</span><strong>Valor fixo</strong><small>Ex.: R$ 500 todo mês</small>{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      {% for erro in form.guardar_modo.errors %}<p class="erro">{{ erro }}</p>{% endfor %}
+
+      <div class="painel-guardar" data-guardar="percentual">
+        {% with field=form.guardar_percentual %}{% include "financas/_campo.html" with sufixo="%" obrigatorio=True %}{% endwith %}
+        <div class="atalhos">
+          <button type="button" data-guardar-pct="5">5%</button>
+          <button type="button" data-guardar-pct="10">10%</button>
+          <button type="button" data-guardar-pct="15">15%</button>
+          <button type="button" data-guardar-pct="20">20%</button>
+          <button type="button" data-guardar-pct="30">30%</button>
+        </div>
+      </div>
+      <div class="painel-guardar" data-guardar="fixo">
+        {% with field=form.guardar_valor %}{% include "financas/_campo.html" with prefixo="R$" obrigatorio=True %}{% endwith %}
+      </div>
+
+      <div class="previa previa-guardar" id="previa-guardar" aria-live="polite">
+        <div class="previa-vazia" id="guardar-vazio">Nada será guardado automaticamente.</div>
+        <div class="previa-valor">
+          <span class="rotulo">Você vai guardar</span>
+          <div><b id="guardar-mes">R$ 0,00</b> <span>por mês</span></div>
+          <p id="guardar-ano"></p>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="acoes-form">
+      <button class="btn bloco" type="submit">{% if conta %}Salvar alterações{% else %}Criar conta e ir para o painel{% endif %}</button>
+      {% if conta %}<a class="btn sec bloco" href="{% url 'financas:painel' conta.pk %}">Cancelar</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("form-conta");
+  const $ = (s) => form.querySelector(s);
+  const pct = $("[name=percentual_gasto]"), mensal = $("[name=gasto_mensal]");
+  const lista = document.getElementById("pagamentos");
+  const totalForms = $("[name=salario-TOTAL_FORMS]");
+  const modelo = document.getElementById("pagamento-modelo");
+
+  function linhasAtivas() {
+    return [...lista.querySelectorAll(".pagamento")].filter((l) => !l.classList.contains("removido"));
+  }
+  function totalSalario() {
+    return linhasAtivas().reduce((t, l) => t + num(l.querySelector("[name$=-valor]")), 0);
+  }
+  function adicionarLinha() {
+    const i = +totalForms.value;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = modelo.innerHTML.replace(/__prefix__/g, i);
+    const linha = tmp.firstElementChild;
+    lista.appendChild(linha);
+    totalForms.value = i + 1;
+    return linha;
+  }
+  document.getElementById("add-pagamento").addEventListener("click", () => {
+    adicionarLinha().querySelector("[name$=-dia]").focus();
+    atualizar();
+  });
+  lista.addEventListener("click", (e) => {
+    const bt = e.target.closest(".remover-pagamento");
+    if (!bt) return;
+    const linha = bt.closest(".pagamento");
+    const del = linha.querySelector("[name$=-DELETE]");
+    if (del) del.checked = true;
+    linha.classList.add("removido");
+    atualizar();
+  });
+  if (!linhasAtivas().length) adicionarLinha();
+  const slider = document.getElementById("pct-slider");
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  const num = (el) => parseFloat(String(el && el.value || "").replace(",", ".")) || 0;
+  const hoje = new Date();
+  const diasMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const nomeMes = hoje.toLocaleDateString("pt-BR", { month: "long" });
+
+  function modo() { const r = form.querySelector("[name=modo_gasto]:checked"); return r ? r.value : null; }
+
+  function atualizarGuardar() {
+    const marcado = form.querySelector("[name=guardar_modo]:checked");
+    const g = marcado ? marcado.value : "nada";
+    form.querySelectorAll(".painel-guardar").forEach((p) => { p.hidden = p.dataset.guardar !== g; });
+    const pctG = num($("[name=guardar_percentual]"));
+    form.querySelectorAll("[data-guardar-pct]").forEach((b) => b.classList.toggle("ativo", pctG === +b.dataset.guardarPct));
+    const salario = totalSalario();
+    let valor = 0, nota = "";
+    if (g === "percentual") {
+      valor = salario * pctG / 100;
+      if (!salario) nota = "Informe os pagamentos do salário em “Sua renda” para calcular a porcentagem.";
+    } else if (g === "fixo") {
+      valor = num($("[name=guardar_valor]"));
+    }
+    const caixa = document.getElementById("previa-guardar");
+    caixa.classList.toggle("cheia", valor > 0);
+    document.getElementById("guardar-vazio").textContent =
+      g === "nada" ? "Nada será guardado automaticamente." : (nota || "Informe quanto guardar para ver o valor.");
+    if (valor > 0) {
+      document.getElementById("guardar-mes").textContent = brl.format(valor);
+      document.getElementById("guardar-ano").textContent = brl.format(valor * 12) + " em um ano" +
+        (salario > 0 ? " · " + (valor / salario * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "% do salário" : "");
+    }
+  }
+
+  function atualizar() {
+    atualizarGuardar();
+    const m = modo();
+    form.querySelectorAll(".painel-modo").forEach((p) => { p.hidden = p.dataset.modo !== m; });
+    form.querySelectorAll(".modo").forEach((l) => l.classList.toggle("ativo", l.querySelector("input").checked));
+    form.querySelectorAll("[data-pct]").forEach((b) => b.classList.toggle("ativo", num(pct) === +b.dataset.pct));
+    slider.value = Math.min(num(pct), 100);
+    slider.style.setProperty("--p", (slider.value || 0) + "%");
+
+    let valorMes = 0;
+    const salario = totalSalario();
+    const caixaTotal = document.getElementById("total-salario");
+    caixaTotal.hidden = linhasAtivas().length < 2 && salario === 0;
+    document.getElementById("total-salario-valor").textContent = brl.format(salario);
+
+    if (m === "percentual") valorMes = salario * num(pct) / 100;
+    else if (m === "mensal") valorMes = num(mensal);
+
+    const previa = document.getElementById("previa");
+    previa.classList.toggle("cheia", valorMes > 0);
+    if (valorMes <= 0) return;
+    document.getElementById("previa-dia").textContent = brl.format(valorMes / diasMes);
+    document.getElementById("previa-detalhe").textContent =
+      brl.format(valorMes) + " no mês · " + nomeMes + " tem " + diasMes + " dias";
+    const sobra = document.getElementById("previa-sobra");
+    if (salario > 0) {
+      const resto = salario - valorMes;
+      sobra.textContent = resto >= 0
+        ? "Sobram " + brl.format(resto) + " do salário para contas fixas e poupança."
+        : "Atenção: isso passa do salário em " + brl.format(-resto) + ".";
+      sobra.classList.toggle("alerta-texto", resto < 0);
+    } else {
+      sobra.textContent = "";
+    }
+  }
+
+  slider.addEventListener("input", () => { pct.value = slider.value; atualizar(); });
+  form.querySelectorAll("[data-pct]").forEach((b) =>
+    b.addEventListener("click", () => { pct.value = b.dataset.pct; atualizar(); }));
+  form.querySelectorAll("[data-guardar-pct]").forEach((b) =>
+    b.addEventListener("click", () => { $("[name=guardar_percentual]").value = b.dataset.guardarPct; atualizar(); }));
+  form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}
