@@ -600,6 +600,53 @@ def _voltar_ao_painel(modelo, item, voltar=None):
     return redirect(_destino_painel(modelo, item, voltar))
 
 
+# ---------- Encerrar (ou reabrir) contas fixas e assinaturas ----------
+
+@require_POST
+@com_familia
+def fixa_encerrar(request, fixa_pk):
+    """Define até quando a conta fixa vale (inclusive), ou tira a data de fim."""
+    fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia)
+    if request.POST.get("reabrir"):
+        fixa.vigente_ate = None
+        fixa.save(update_fields=["vigente_ate"])
+        messages.success(request, f"{fixa.nome} voltou a valer sem data para acabar.")
+        return _aba(fixa.conta, "contas")
+    ate = _data_param(request.POST, "ate")
+    if ate is None:
+        messages.error(request, "Informe a data em que termina.")
+    elif fixa.vigente_desde and ate < fixa.vigente_desde:
+        messages.error(request, f"A data de fim não pode ser antes do início ({fixa.vigente_desde:%d/%m/%Y}).")
+    else:
+        fixa.vigente_ate = ate
+        fixa.save(update_fields=["vigente_ate"])
+        messages.success(request, f"{fixa.nome} termina em {ate:%d/%m/%Y}. Os meses anteriores continuam valendo.")
+    return _aba(fixa.conta, "contas")
+
+
+@require_POST
+@com_familia
+def assinatura_encerrar(request, assinatura_pk):
+    """Cancela a assinatura a partir de uma data (não cobra mais nesse dia nem depois), ou reabre."""
+    a = get_object_or_404(AssinaturaCartao, pk=assinatura_pk, cartao__conta__familia=request.familia)
+    conta = a.cartao.conta
+    if request.POST.get("reabrir"):
+        a.fim = None
+        a.save(update_fields=["fim"])
+        messages.success(request, f"Assinatura {a.descricao} reativada.")
+        return _aba(conta, "contas")
+    fim = _data_param(request.POST, "fim")
+    if fim is None:
+        messages.error(request, "Informe a data do cancelamento.")
+    elif fim < a.inicio:
+        messages.error(request, f"O cancelamento não pode ser antes do início ({a.inicio:%d/%m/%Y}).")
+    else:
+        a.fim = fim
+        a.save(update_fields=["fim"])
+        messages.success(request, f"Assinatura {a.descricao} cancelada a partir de {fim:%d/%m/%Y}.")
+    return _aba(conta, "contas")
+
+
 # ---------- Gastos detalhados do dinheiro do dia ----------
 
 def _voltar_ao_dia(conta, data):

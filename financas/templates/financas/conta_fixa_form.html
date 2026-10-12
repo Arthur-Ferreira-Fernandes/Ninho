@@ -99,12 +99,20 @@
       <p class="ajuda">Dias 29, 30 e 31: nos meses mais curtos, cai no último dia do mês.</p>
     </div>
 
-    <details class="bloco-vigencia"{% if form.vigente_desde.value or form.vigente_ate.value or form.vigente_ate.errors %} open{% endif %}>
-      <summary>Período (opcional): quando começa ou termina</summary>
-      <div class="campos-2">
-        {% with field=form.vigente_desde %}{% include "financas/_campo.html" %}{% endwith %}
-        {% with field=form.vigente_ate %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="campo bloco-fim">
+      <label>Até quando?</label>
+      <div class="segmentado" role="radiogroup" aria-label="Até quando">
+        <label><input type="radio" name="tem_fim" value="nao"{% if not form.vigente_ate.value %} checked{% endif %}><span>Sem data para acabar</span></label>
+        <label><input type="radio" name="tem_fim" value="sim"{% if form.vigente_ate.value %} checked{% endif %}><span>Termina em…</span></label>
       </div>
+      <div id="campo-fim"{% if not form.vigente_ate.value and not form.vigente_ate.errors %} hidden{% endif %}>
+        {% with field=form.vigente_ate %}{% include "financas/_campo.html" with obrigatorio=True %}{% endwith %}
+      </div>
+    </div>
+
+    <details class="bloco-vigencia"{% if form.vigente_desde.value or form.vigente_desde.errors %} open{% endif %}>
+      <summary>Começa só mais pra frente? (opcional)</summary>
+      {% with field=form.vigente_desde %}{% include "financas/_campo.html" %}{% endwith %}
     </details>
 
     {% if form.ativa %}
@@ -208,6 +216,15 @@
       "Próxima vez: " + d.toLocaleDateString("pt-BR") + " (preenchida acima).";
   }
   if (ultimaVez) ultimaVez.addEventListener("change", () => { calcularPelaUltima(); atualizar(); });
+
+  // "Até quando?": sem fim limpa a data; "termina em" mostra o campo
+  const campoFim = document.getElementById("campo-fim");
+  const inputFim = form.querySelector("[name=vigente_ate]");
+  form.querySelectorAll("[name=tem_fim]").forEach((r) => r.addEventListener("change", () => {
+    const comFim = r.value === "sim" && r.checked;
+    campoFim.hidden = !comFim;
+    if (comFim) inputFim.focus(); else inputFim.value = "";
+  }));
 
   function atualizar() {
     const periodica = freq() === "dias";

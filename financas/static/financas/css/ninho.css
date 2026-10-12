@@ -1216,3 +1216,26 @@ html[data-tema="escuro"] .logo img { box-shadow: 0 0 0 1px rgba(255, 255, 255, .
 .ajuste-mes summary { list-style: none; display: inline; }
 .ajuste-mes summary::-webkit-details-marker { display: none; }
 .ajuste-selo { font-size: .72rem; font-weight: 700; color: var(--azul-txt); background: var(--azul-bg); padding: 1px 8px; border-radius: 99px; }
+
+/* encerrar / mudar fim */
+details.encerrar { position: relative; }
+details.encerrar > summary { list-style: none; }
+details.encerrar > summary::-webkit-details-marker { display: none; }
+.encerrar-form {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 15; width: 230px; text-align: left;
+  display: grid; gap: 8px; padding: 12px; background: var(--card); border: 1px solid var(--borda);
+  border-radius: var(--raio-sm); box-shadow: var(--sombra);
+}
+.encerrar-form label { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; margin: 0; }
+.encerrar-form input { width: 100%; }
+.encerrar-form small { font-size: .72rem; color: var(--muted); }
+
+/* "Até quando?" */
+.segmentado { display: inline-grid; grid-auto-flow: column; gap: 2px; background: var(--sup-3); border-radius: var(--raio-sm); padding: 3px; margin-bottom: 10px; }
+.segmentado label { margin: 0; cursor: pointer; }
+.segmentado input { position: absolute; opacity: 0; pointer-events: none; }
+.segmentado span { display: block; padding: 7px 14px; border-radius: 6px; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.segmentado input:checked + span { background: var(--card); color: var(--txt); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.segmentado input:focus-visible + span { outline: 3px solid var(--ouro); outline-offset: 1px; }
+#campo-fim[hidden] { display: none; }
+.etiqueta { display: inline-block; white-space: nowrap; }

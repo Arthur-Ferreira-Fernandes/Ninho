@@ -1705,3 +1705,72 @@ class AjusteDoMesTests(TestCase):
     def test_tela_mostra_alterar_so_neste_mes(self):
         r = self.client.get(reverse("financas:painel", args=[self.conta.pk]) + "?mes=2026-02&dia=2026-02-05")
         self.assertContains(r, "Alterar só neste mês")
+
+
+class EncerrarTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("10000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("0"))
+        self.aluguel = ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1500"), dia=10)
+        self.cartao = Cartao.objects.create(conta=self.conta, nome="Roxinho", dia_fechamento=25, dia_vencimento=5)
+        self.netflix = AssinaturaCartao.objects.create(cartao=self.cartao, descricao="Netflix", valor=Decimal("40"),
+                                                       dia_cobranca=8, inicio=date(2026, 1, 1))
+        self.painel = reverse("financas:painel", args=[self.conta.pk])
+
+    def test_encerrar_conta_fixa_mantem_o_passado(self):
+        self.netflix.delete()   # isola o efeito do aluguel
+        antes = saldo_esperado(self.conta, date(2026, 3, 31)).esperado
+        r = self.client.post(reverse("financas:fixa_encerrar", args=[self.aluguel.pk]), {"ate": "2026-03-31"})
+        self.assertRedirects(r, self.painel + "#contas", fetch_redirect_response=False)
+        self.aluguel.refresh_from_db()
+        self.assertEqual(self.aluguel.vigente_ate, date(2026, 3, 31))
+        self.assertEqual(saldo_esperado(self.conta, date(2026, 3, 31)).esperado, antes)       # passado intacto
+        self.assertEqual(saldo_esperado(self.conta, date(2026, 6, 30)).esperado, antes)       # abril em diante: sem aluguel
+        self.client.post(reverse("financas:fixa_encerrar", args=[self.aluguel.pk]), {"reabrir": "1"})
+        self.aluguel.refresh_from_db()
+        self.assertIsNone(self.aluguel.vigente_ate)
+
+    def test_fim_antes_do_inicio_e_sem_data(self):
+        self.aluguel.vigente_desde = date(2026, 5, 1)
+        self.aluguel.save()
+        url = reverse("financas:fixa_encerrar", args=[self.aluguel.pk])
+        self.client.post(url, {"ate": "2026-04-01"})
+        self.client.post(url, {"ate": ""})
+        self.aluguel.refresh_from_db()
+        self.assertIsNone(self.aluguel.vigente_ate)
+
+    def test_encerrar_e_reativar_assinatura(self):
+        url = reverse("financas:assinatura_encerrar", args=[self.netflix.pk])
+        self.client.post(url, {"fim": "2026-04-01"})
+        self.netflix.refresh_from_db()
+        self.assertEqual(self.netflix.fim, date(2026, 4, 1))
+        self.client.post(url, {"fim": "2025-06-01"})          # antes do início: recusado
+        self.netflix.refresh_from_db()
+        self.assertEqual(self.netflix.fim, date(2026, 4, 1))
+        self.client.post(url, {"reabrir": "1"})
+        self.netflix.refresh_from_db()
+        self.assertIsNone(self.netflix.fim)
+
+    def test_botoes_na_lista_e_outra_familia(self):
+        r = self.client.get(self.painel)
+        self.assertContains(r, reverse("financas:fixa_encerrar", args=[self.aluguel.pk]))
+        self.assertContains(r, reverse("financas:assinatura_encerrar", args=[self.netflix.pk]))
+        self.assertContains(r, "Encerrar")
+        self.client.post(reverse("financas:fixa_encerrar", args=[self.aluguel.pk]), {"ate": "2099-01-01"})
+        self.assertContains(self.client.get(self.painel), "Reabrir")
+        outra = Conta.objects.create(familia=Familia.objects.create(nome="Vizinhos"), nome="Deles",
+                                     saldo_inicial=0, data_inicio=date(2026, 1, 1))
+        alheia = ContaFixa.objects.create(conta=outra, nome="X", valor=1, dia=1)
+        r = self.client.post(reverse("financas:fixa_encerrar", args=[alheia.pk]), {"ate": "2026-02-01"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_formulario_ate_quando(self):
+        url = reverse("financas:item_editar", args=["fixa", self.aluguel.pk])
+        dados = campos(self.client.get(url), "form-fixa")
+        self.assertEqual(dados["tem_fim"], "nao")
+        dados.update({"tem_fim": "sim", "vigente_ate": "2026-08-31", "dia": "10"})
+        self.client.post(url, dados)
+        self.aluguel.refresh_from_db()
+        self.assertEqual(self.aluguel.vigente_ate, date(2026, 8, 31))

@@ -241,7 +241,9 @@ class ContaFixaForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["vigente_desde"].help_text = ""
+        self.fields["vigente_ate"].label = "Último dia em que vale"
         self.fields["vigente_ate"].help_text = "Ex.: o aluguel termina quando você se mudar. Os meses anteriores continuam valendo."
+        self.fields["vigente_desde"].label = "Começa em"
         if not self.instance.pk:
             del self.fields["ativa"]  # novas já nascem ativas
         if self.instance.salario:

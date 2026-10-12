@@ -567,11 +567,26 @@
           <td><a href="{% url 'financas:assinatura_editar' i.obj.pk %}">{{ i.nome }}</a>
             <span class="etiqueta etiqueta-cartao" title="Cobrada no cartão todo dia {{ i.dia }}; o valor sai da conta no vencimento da fatura">cartão {{ i.obj.cartao.nome }}</span>
             {% if i.inativa %}<span class="etiqueta neutra">cancelada em {{ i.obj.fim|date:"d/m/Y" }}</span>
+            {% elif i.obj.fim %}<span class="etiqueta etiqueta-futura">cancela em {{ i.obj.fim|date:"d/m/Y" }}</span>
             {% elif i.obj.inicio > hoje %}<span class="etiqueta neutra">começa {{ i.obj.inicio|date:"d/m" }}</span>{% endif %}</td>
           {% endif %}
           <td class="num {% if i.receita %}pos{% else %}neg{% endif %}">{% if i.obj.variavel or i.obj.periodica %}≈ {% endif %}{% if i.receita %}+{% else %}−{% endif %} {{ i.valor|brl }}{% if i.obj.periodica %}<small class="rotulo por-mes">≈ {{ i.obj.valor_mensal|brl }}/mês</small>{% endif %}</td>
           <td class="num col-acoes"><div class="acoes-linha">
             {% if i.tipo == "fixa" %}
+            {% if i.obj.vigente_ate %}
+            <form method="post" action="{% url 'financas:fixa_encerrar' i.obj.pk %}">{% csrf_token %}
+              <button type="submit" name="reabrir" value="1" class="btn fantasma" title="Tirar a data de fim">Reabrir</button>
+            </form>
+            {% endif %}
+            <details class="encerrar">
+              <summary class="btn fantasma">{% if i.obj.vigente_ate %}Mudar fim{% else %}Encerrar{% endif %}</summary>
+              <form method="post" action="{% url 'financas:fixa_encerrar' i.obj.pk %}" class="encerrar-form">{% csrf_token %}
+                <label>Vale até (inclusive)
+                  <input type="date" name="ate" required value="{% if i.obj.vigente_ate %}{{ i.obj.vigente_ate|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}"></label>
+                <small>Os meses anteriores continuam valendo.</small>
+                <button type="submit" class="btn">Confirmar</button>
+              </form>
+            </details>
             <a class="btn fantasma" href="{% url 'financas:item_editar' 'fixa' i.obj.pk %}?voltar=contas">Editar</a>
             <form method="post" action="{% url 'financas:item_excluir' 'fixa' i.obj.pk %}"
                   onsubmit="return confirm('Excluir {{ i.nome|escapejs }} ({{ i.valor|brl }} todo dia {{ i.dia }})? Ela sai de todos os meses, inclusive dos que já passaram.')">{% csrf_token %}
@@ -579,6 +594,20 @@
               <button type="submit" class="btn fantasma perigo-texto">Excluir</button>
             </form>
             {% else %}
+            {% if i.obj.fim %}
+            <form method="post" action="{% url 'financas:assinatura_encerrar' i.obj.pk %}">{% csrf_token %}
+              <button type="submit" name="reabrir" value="1" class="btn fantasma" title="Tirar o cancelamento">Reabrir</button>
+            </form>
+            {% endif %}
+            <details class="encerrar">
+              <summary class="btn fantasma">{% if i.obj.fim %}Mudar fim{% else %}Encerrar{% endif %}</summary>
+              <form method="post" action="{% url 'financas:assinatura_encerrar' i.obj.pk %}" class="encerrar-form">{% csrf_token %}
+                <label>Cancelar a partir de
+                  <input type="date" name="fim" required value="{% if i.obj.fim %}{{ i.obj.fim|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}"></label>
+                <small>Não cobra mais nesse dia nem depois.</small>
+                <button type="submit" class="btn">Confirmar</button>
+              </form>
+            </details>
             <a class="btn fantasma" href="{% url 'financas:assinatura_editar' i.obj.pk %}">Editar</a>
             <form method="post" action="{% url 'financas:assinatura_excluir' i.obj.pk %}"
                   onsubmit="return confirm('Excluir a assinatura {{ i.nome|escapejs }}? Ela some também dos meses passados. Para só cancelar daqui pra frente, edite e informe a data de cancelamento.')">{% csrf_token %}
