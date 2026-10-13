@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,13 +20,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-tepgyh9y$zf3x0t5rgy78czpua+airbj5xf+!_^5=pj_^3#(l*'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def _lista(nome, padrao=""):
+    return [v.strip() for v in os.environ.get(nome, padrao).split(",") if v.strip()]
 
-ALLOWED_HOSTS = []
+
+# Sem variáveis de ambiente, vale a configuração de desenvolvimento local.
+# No Docker, elas vêm do docker-compose.yml / .env.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY", 'django-insecure-tepgyh9y$zf3x0t5rgy78czpua+airbj5xf+!_^5=pj_^3#(l*')
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+
+ALLOWED_HOSTS = _lista("DJANGO_ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = _lista("DJANGO_CSRF_TRUSTED_ORIGINS")
+
+# Atrás de um proxy com HTTPS (ex.: hospedado na internet)
+if os.environ.get("DJANGO_HTTPS") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -50,6 +63,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if not DEBUG:
+    # no Docker o gunicorn não serve /static/; o whitenoise faz isso
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 ROOT_URLCONF = 'config.urls'
 
@@ -79,7 +96,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get("DJANGO_DB_PATH", BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -119,6 +136,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.environ.get("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+                    if not DEBUG else "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

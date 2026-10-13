@@ -13,6 +13,7 @@ urlpatterns = [
                                                  redirect_authenticated_user=True), name="entrar"),
     path("sair/", auth_views.LogoutView.as_view(), name="sair"),
     path("cadastro/", views.cadastro, name="cadastro"),
+    path("meus-dados/", views.meus_dados, name="meus_dados"),
     path("familia/", views.familia, name="familia"),
     path("familia/comecar/", views.sem_familia, name="sem_familia"),
     path("familia/pedido/cancelar/", views.pedido_cancelar, name="pedido_cancelar"),

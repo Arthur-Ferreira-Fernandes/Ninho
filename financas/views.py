@@ -4,7 +4,7 @@ from decimal import Decimal
 from functools import wraps
 
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from .calculos import (alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
-from .forms import (AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
+from .forms import (PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
                     LancamentoForm, PagamentosSalarioFormSet, UsoDiarioForm, UsuarioForm)
 from .templatetags.dinheiro import brl
 from .models import (Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
@@ -138,6 +138,32 @@ def sem_familia(request):
 def pedido_cancelar(request):
     PedidoEntrada.objects.filter(usuario=request.user).delete()
     return redirect("financas:sem_familia")
+
+
+@login_required
+def meus_dados(request):
+    """Dados pessoais e senha de quem está logado."""
+    usuario = request.user
+    membro = getattr(usuario, "membro", None)
+    acao = request.POST.get("acao") if request.method == "POST" else None
+    form = PerfilForm(request.POST if acao == "dados" else None, instance=usuario, membro=membro, prefix="dados")
+    form_senha = SenhaForm(usuario, request.POST if acao == "senha" else None, prefix="senha")
+
+    if acao == "dados" and form.is_valid():
+        form.save()
+        messages.success(request, "Seus dados foram atualizados.")
+        return redirect("financas:meus_dados")
+    if acao == "senha" and form_senha.is_valid():
+        form_senha.save()
+        update_session_auth_hash(request, form_senha.user)  # continua logado após trocar
+        messages.success(request, "Senha alterada.")
+        return redirect("financas:meus_dados")
+    if acao == "dados":
+        usuario.refresh_from_db()  # o resumo ao lado mostra o que está salvo, não o que falhou
+
+    return render(request, "financas/meus_dados.html", {
+        "form": form, "form_senha": form_senha, "membro": membro, "acao": acao,
+    })
 
 
 @com_familia

@@ -219,6 +219,11 @@ input:focus, select:focus { outline: none; border-color: var(--marca-600); box-s
   width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
   background: var(--marca-700); color: #fff; font-weight: 700; font-size: .85rem; text-transform: uppercase;
 }
+.perfil-link {
+  display: inline-flex; align-items: center; gap: 8px; color: var(--txt); text-decoration: none;
+  padding: 3px 10px 3px 3px; border-radius: 99px; border: 1px solid transparent;
+}
+.perfil-link:hover, .perfil-link[aria-current] { border-color: var(--borda); background: var(--sup-2); }
 
 main { max-width: 1040px; margin: 0 auto; padding: 20px 16px; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -342,7 +347,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 @media (max-width: 520px) {
   .app-topo { flex-wrap: nowrap; gap: 10px; }
-  .app-usuario > span:not(.avatar) { display: none; }
+  .app-usuario > span:not(.avatar), .perfil-link-nome { display: none; }
+  .perfil-link { padding: 0; }
   .tenant { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .conta-form-card { padding: 20px 16px; }
 }
@@ -1292,3 +1298,13 @@ main:has(.dia-layout), main:has(.mensal-layout) { max-width: 1360px; }
   .coluna-mapa, .resumo-mes-card { position: static; }
   .resumo-mes-card { order: -1; }
 }
+
+/* meus dados */
+.perfil-coluna { display: grid; gap: 16px; min-width: 0; }
+.perfil-coluna .card { scroll-margin-top: 80px; }
+.perfil-coluna .card h2 { font-size: 1.15rem; margin-bottom: 6px; }
+.perfil-resumo { display: grid; justify-items: center; text-align: center; gap: 2px; }
+.perfil-resumo .resumo-lista { width: 100%; text-align: left; margin-top: 14px; }
+.avatar-grande { width: 64px; height: 64px; font-size: 1.6rem; margin-bottom: 8px; }
+.perfil-nome { font-size: 1.1rem; }
+.perfil-login { color: var(--muted); }

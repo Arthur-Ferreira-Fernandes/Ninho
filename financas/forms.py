@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .templatetags.dinheiro import brl
@@ -353,6 +353,64 @@ class UsuarioForm(UserCreationForm):
             "password1": {"placeholder": "Crie uma senha", "autocomplete": "new-password"},
             "password2": {"placeholder": "Repita a senha", "autocomplete": "new-password"},
         })
+
+
+class PerfilForm(forms.ModelForm):
+    """Dados pessoais do usuário logado; o parentesco fica no vínculo com a família."""
+
+    first_name = forms.CharField(label="Nome", max_length=150)
+    parentesco = forms.CharField(label="Parentesco na família", max_length=50, required=False)
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "email", "username"]
+        labels = {"last_name": "Sobrenome", "email": "E-mail", "username": "Login"}
+
+    def __init__(self, *args, membro=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.membro = membro
+        if membro is None:
+            del self.fields["parentesco"]
+        else:
+            self.fields["parentesco"].initial = membro.parentesco
+        self.fields["username"].help_text = "Usado para entrar. Letras, números e @ . + - _"
+        _attrs(self, {
+            "first_name": {"placeholder": "Como podemos te chamar?", "autocomplete": "given-name"},
+            "last_name": {"placeholder": "Seu sobrenome", "autocomplete": "family-name"},
+            "email": {"placeholder": "voce@email.com", "autocomplete": "email"},
+            "username": {"placeholder": "ex.: maria.silva", "autocomplete": "username"},
+        })
+        if membro is not None:
+            _attrs(self, {"parentesco": {"placeholder": "Ex.: esposa, filho, mãe"}})
+
+    def clean_username(self):
+        login = self.cleaned_data["username"]
+        if User.objects.filter(username__iexact=login).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("Esse login já está em uso.")
+        return login
+
+    def save(self, commit=True):
+        usuario = super().save(commit)
+        if commit and self.membro is not None:
+            self.membro.parentesco = self.cleaned_data["parentesco"].strip()
+            self.membro.save(update_fields=["parentesco"])
+        return usuario
+
+
+class SenhaForm(PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["old_password"].label = "Senha atual"
+        self.fields["new_password1"].label = "Nova senha"
+        self.fields["new_password1"].help_text = "Pelo menos 8 caracteres, sem ser só números."
+        self.fields["new_password2"].label = "Confirme a nova senha"
+        self.fields["new_password2"].help_text = ""
+        _attrs(self, {
+            "old_password": {"placeholder": "Sua senha de hoje", "autofocus": False},
+            "new_password1": {"placeholder": "Crie uma nova senha"},
+            "new_password2": {"placeholder": "Repita a nova senha"},
+        })
+        self.fields["old_password"].widget.attrs.pop("autofocus", None)
 
 
 class EntrarFamiliaForm(forms.Form):

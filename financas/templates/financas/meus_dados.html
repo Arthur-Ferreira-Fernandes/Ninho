@@ -1,0 +1,68 @@
+{% extends "financas/base.html" %}
+{% block titulo %}Meus dados · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:inicio' %}">← Início</a>
+
+<div class="fixa-layout">
+  <div class="perfil-coluna">
+    <form method="post" novalidate class="card fixa-card" id="dados">{% csrf_token %}
+      <input type="hidden" name="acao" value="dados">
+      <h2 class="titulo-form">Meus dados</h2>
+      <p class="sub">Como você aparece para a família e como entra no {{ marca.nome }}.</p>
+      {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+      <div class="campos-2">
+        {% with field=form.first_name %}{% include "financas/_campo.html" %}{% endwith %}
+        {% with field=form.last_name %}{% include "financas/_campo.html" %}{% endwith %}
+      </div>
+      {% with field=form.email %}{% include "financas/_campo.html" %}{% endwith %}
+      <div class="campos-2">
+        {% with field=form.username %}{% include "financas/_campo.html" with prefixo="@" %}{% endwith %}
+        {% if form.parentesco %}{% with field=form.parentesco %}{% include "financas/_campo.html" %}{% endwith %}{% endif %}
+      </div>
+
+      <div class="acoes-form linha-botoes">
+        <button class="btn" type="submit">Salvar dados</button>
+      </div>
+    </form>
+
+    <form method="post" novalidate class="card fixa-card" id="senha">{% csrf_token %}
+      <input type="hidden" name="acao" value="senha">
+      <h2>Alterar senha</h2>
+      <p class="sub">Você continua conectado neste aparelho depois de trocar.</p>
+      {% for erro in form_senha.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+      {% with field=form_senha.old_password %}{% include "financas/_campo.html" %}{% endwith %}
+      <div class="campos-2">
+        {% with field=form_senha.new_password1 %}{% include "financas/_campo.html" %}{% endwith %}
+        {% with field=form_senha.new_password2 %}{% include "financas/_campo.html" %}{% endwith %}
+      </div>
+
+      <div class="acoes-form linha-botoes">
+        <button class="btn sec" type="submit">Alterar senha</button>
+      </div>
+    </form>
+  </div>
+
+  <aside class="fixa-resumo">
+    <div class="card resumo-card perfil-resumo">
+      <span class="avatar avatar-grande" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
+      <strong class="perfil-nome">{{ user.get_full_name|default:user.username }}</strong>
+      <small class="perfil-login">@{{ user.username }}</small>
+      <dl class="resumo-lista">
+        <div><dt>E-mail</dt><dd>{{ user.email|default:"—" }}</dd></div>
+        {% if membro %}
+        <div><dt>Família</dt><dd><a href="{% url 'financas:familia' %}">{{ membro.familia }}</a></dd></div>
+        <div><dt>Papel</dt><dd>{{ membro.get_papel_display }}</dd></div>
+        {% if membro.parentesco %}<div><dt>Parentesco</dt><dd>{{ membro.parentesco }}</dd></div>{% endif %}
+        {% endif %}
+        <div><dt>Membro desde</dt><dd>{{ user.date_joined|date:"d/m/Y" }}</dd></div>
+      </dl>
+    </div>
+  </aside>
+</div>
+
+{% if acao == "senha" %}
+<script>document.getElementById("senha").scrollIntoView({ block: "start" });</script>
+{% endif %}
+{% endblock %}

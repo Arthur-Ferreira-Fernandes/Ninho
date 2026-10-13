@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    image: ninho
+    restart: unless-stopped
+    ports:
+      - "${NINHO_PORTA:-8002}:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?defina DJANGO_SECRET_KEY no arquivo .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8002,http://127.0.0.1:8002}
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
+    volumes:
+      - dados:/app/dados
+
+volumes:
+  dados:

@@ -11,8 +11,10 @@
       {% if user.membro %}<a class="tenant" href="{% url 'financas:familia' %}" title="Configurações da família"><i></i>{{ user.membro.familia }}</a>{% endif %}
       <div class="app-usuario">
         <button type="button" class="tema-switch" role="switch" onclick="trocarTema()" aria-label="Tema claro" title="Tema claro" aria-checked="{% if tema == 'claro' %}true{% else %}false{% endif %}"><span class="tema-trilho" aria-hidden="true"><span class="tema-fundo-icone sol">☀</span><span class="tema-fundo-icone lua">☾</span><span class="tema-bolinha"></span></span></button>
-        <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
-        <span>{{ user.first_name|default:user.username }}</span>
+        <a class="perfil-link" href="{% url 'financas:meus_dados' %}" title="Meus dados"{% if request.resolver_match.url_name == "meus_dados" %} aria-current="page"{% endif %}>
+          <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>
+          <span class="perfil-link-nome">{{ user.first_name|default:user.username }}</span>
+        </a>
         <form method="post" action="{% url 'financas:sair' %}">{% csrf_token %}
           <button class="btn fantasma" type="submit">Sair</button>
         </form>

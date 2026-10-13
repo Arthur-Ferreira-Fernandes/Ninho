@@ -1905,3 +1905,59 @@ class ExtratoDiarioMensalTests(TestCase):
         self.assertContains(r, "Saídas")
         self.assertContains(r, "+ R$ 4.000,00")
         self.assertContains(r, "− R$ 1.510,00")
+
+
+class MeusDadosTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        self.usuario = User.objects.get(username="arthur")
+        self.url = reverse("financas:meus_dados")
+
+    def test_cabecalho_leva_para_meus_dados(self):
+        r = self.client.get(reverse("financas:familia"))
+        self.assertContains(r, f'href="{self.url}"')
+
+    def test_formulario_vem_preenchido_e_salva(self):
+        r = self.client.get(self.url)
+        dados = campos(r, "dados")
+        self.assertEqual(dados["dados-first_name"], "Arthur")
+        self.assertEqual(dados["dados-username"], "arthur")
+        dados.update({"dados-last_name": "Silva", "dados-email": "arthur@exemplo.com",
+                      "dados-parentesco": "pai"})
+        self.assertRedirects(self.client.post(self.url, dados), self.url)
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.get_full_name(), "Arthur Silva")
+        self.assertEqual(self.usuario.email, "arthur@exemplo.com")
+        self.assertEqual(self.usuario.membro.parentesco, "pai")
+
+    def test_login_em_uso_nao_salva(self):
+        cadastrar(self.client_class(), username="maria", familia=None)
+        dados = dict(campos(self.client.get(self.url), "dados"), **{"dados-username": "Maria"})
+        r = self.client.post(self.url, dados)
+        self.assertContains(r, "Esse login já está em uso.")
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.username, "arthur")
+
+    def test_trocar_senha_mantem_logado(self):
+        r = self.client.post(self.url, {"acao": "senha", "senha-old_password": "senha-forte-123",
+                                        "senha-new_password1": "outra-senha-456",
+                                        "senha-new_password2": "outra-senha-456"})
+        self.assertRedirects(r, self.url)
+        self.assertEqual(self.client.get(self.url).status_code, 200)  # sessão continua válida
+        self.usuario.refresh_from_db()
+        self.assertTrue(self.usuario.check_password("outra-senha-456"))
+
+    def test_senha_atual_errada(self):
+        r = self.client.post(self.url, {"acao": "senha", "senha-old_password": "errada",
+                                        "senha-new_password1": "outra-senha-456",
+                                        "senha-new_password2": "outra-senha-456"})
+        self.assertEqual(r.status_code, 200)
+        self.usuario.refresh_from_db()
+        self.assertTrue(self.usuario.check_password("senha-forte-123"))
+
+    def test_sem_familia_tambem_acessa(self):
+        outro = self.client_class()
+        cadastrar(outro, username="joana", familia=None)
+        r = outro.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("dados-parentesco", campos(r, "dados"))
