@@ -1,0 +1,94 @@
+{% load dinheiro %}
+        {% if m.origem == "guardar" %}
+        <div class="mov">
+          <dt><a href="#investimentos">{{ m.nome }}</a>
+            <small>{% if m.objeto.avulso %}valor avulso{% elif m.objeto.confirmado %}confirmado por você{% else %}previsto para o dia de maior saldo de {{ mes|date:"F"|lower }}{% endif %}</small></dt>
+          <dd class="neg">− {{ m.valor|brl }}</dd>
+        </div>
+        {% elif m.origem == "fatura" %}
+        <div class="mov fatura">
+          <dt><span class="fatura-nome">{{ m.nome }}</span>
+            <small>fecha {{ m.objeto.fechamento|date:"d/m" }} · {% with n=m.objeto.quantidade %}{{ n }} {% if n == 1 %}item{% else %}itens{% endif %}{% endwith %}</small>
+            <ul class="fatura-itens">
+              {% for p in m.objeto.parcelas %}
+              <li><a href="{% url 'financas:compra_editar' p.compra.pk %}">{{ p.compra.descricao }}</a>
+                {% if p.compra.parcelas > 1 %}<span class="parcela-tag">{{ p.rotulo }}</span>{% endif %}
+                <span class="fatura-valor">{{ p.valor|brl }}</span></li>
+              {% endfor %}
+              {% for c in m.objeto.cobrancas %}
+              <li><a href="{% url 'financas:assinatura_editar' c.assinatura.pk %}">{{ c.assinatura.descricao }}</a>
+                <span class="parcela-tag">mensal</span>
+                <span class="fatura-valor">{{ c.valor|brl }}</span></li>
+              {% endfor %}
+            </ul></dt>
+          <dd class="neg">− {{ m.valor|brl }}</dd>
+        </div>
+        {% else %}
+        <div class="mov">
+          <dt><a href="{% url 'financas:item_editar' m.origem m.objeto.pk %}">{{ m.nome }}</a>
+            <small>{% if m.origem == "fixa" %}{% if m.objeto.periodica %}a cada {{ m.objeto.intervalo_dias }} dias · {% if m.evento.pagamento %}{% if m.entrada %}recebido{% else %}feito{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (previsto {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}previsto{% endif %}{% elif m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% elif m.evento.ajustado %}conta fixa · ajustada neste mês (normalmente {{ m.objeto.valor|brl }}{% if m.evento.pagamento.data != m.evento.vencimento %}, dia {{ m.evento.vencimento|date:"d/m" }}{% endif %}){% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
+            {% if m.origem == "fixa" and not m.objeto.marcavel %}
+              {% if m.evento.ajustado %}
+              <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
+                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                <span class="ajuste-selo">ajustado</span>
+                <button type="submit" class="acao-item">Desfazer ajuste</button>
+              </form>
+              {% else %}
+              <details class="ajuste-mes">
+                <summary class="acao-item">Alterar só neste mês</summary>
+                <form method="post" action="{% url 'financas:pagamento_registrar' m.objeto.pk %}" class="pagar-form">{% csrf_token %}
+                  <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
+                  <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                  <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+                    <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required
+                           value="{{ m.valor|stringformat:'s' }}" aria-label="Valor de {{ m.nome }} só neste mês">
+                  </div>
+                  <input type="date" name="data" value="{{ m.evento.vencimento|date:'Y-m-d' }}" aria-label="Data neste mês" required>
+                  <button type="submit" class="btn">Salvar</button>
+                </form>
+              </details>
+              {% endif %}
+            {% endif %}
+            {% if m.origem == "fixa" and m.objeto.marcavel %}
+              {% if m.evento.pagamento %}
+              <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
+                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                <span class="pago-selo">✓ {% if m.entrada %}recebida{% elif m.objeto.periodica %}feito{% else %}paga{% endif %}</span>
+                <button type="submit" class="acao-item">Desfazer</button>
+              </form>
+              {% else %}
+              <form method="post" action="{% url 'financas:pagamento_registrar' m.objeto.pk %}" class="pagar-form">{% csrf_token %}
+                <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
+                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+                  <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required
+                         value="{{ m.valor|stringformat:'s' }}" aria-label="Valor {% if m.entrada %}recebido{% else %}pago{% endif %} de {{ m.nome }}">
+                </div>
+                <input type="date" name="data" value="{% if m.evento.vencimento > hoje %}{{ hoje|date:'Y-m-d' }}{% else %}{{ m.evento.vencimento|date:'Y-m-d' }}{% endif %}" aria-label="Data do pagamento" required>
+                <button type="submit" class="btn">{% if m.entrada %}Recebi{% elif m.objeto.periodica %}Comprei{% else %}Paguei{% endif %}</button>
+              </form>
+              {% endif %}
+            {% endif %}
+            {% if m.origem == "fixa" %}
+            <span class="acoes-item">
+              <a href="{% url 'financas:item_editar' 'fixa' m.objeto.pk %}?voltar=dia:{{ dia.data|date:'Y-m-d' }}" class="acao-item">Editar</a>
+              <form method="post" action="{% url 'financas:item_excluir' 'fixa' m.objeto.pk %}"
+                    onsubmit="return confirm('Excluir a conta fixa “{{ m.nome|escapejs }}”? Ela sai de todos os meses, inclusive dos que já passaram.')">{% csrf_token %}
+                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+                <button type="submit" class="acao-item perigo-texto">Excluir</button>
+              </form>
+            </span>
+            {% endif %}
+            {% if m.origem == "lancamento" %}
+            <span class="acoes-item">
+              <a href="{% url 'financas:item_editar' 'lancamento' m.objeto.pk %}" class="acao-item">Editar</a>
+              <form method="post" action="{% url 'financas:item_excluir' 'lancamento' m.objeto.pk %}"
+                    onsubmit="return confirm('Excluir o lançamento “{{ m.nome|escapejs }}” de {{ m.valor|brl }}?')">{% csrf_token %}
+                <button type="submit" class="acao-item perigo-texto">Excluir</button>
+              </form>
+            </span>
+            {% endif %}</dt>
+          <dd class="{% if m.entrada %}pos{% else %}neg{% endif %}">{% if m.evento.estimado or m.objeto.periodica and not m.evento.pagamento %}≈ {% endif %}{% if m.entrada %}+{% else %}−{% endif %} {{ m.valor|brl }}</dd>
+        </div>
+        {% endif %}

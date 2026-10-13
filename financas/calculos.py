@@ -301,6 +301,11 @@ class Dia:
         return self.data.weekday() >= 5
 
     @property
+    def total_saidas(self):
+        """Tudo o que sai no dia: contas, cartão, lançamentos, guardado e dinheiro do dia a dia."""
+        return self.saidas + self.gasto
+
+    @property
     def ajuste(self):
         """Quanto o disponível do dia difere do valor diário normal (sobras ou faltas).
 

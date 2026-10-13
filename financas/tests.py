@@ -1876,3 +1876,32 @@ class ReservaPorMesTests(TestCase):
         meses = {m["data"]: m for a in anos for m in a["meses"]}
         m = meses[self.mes_queda]
         self.assertEqual(m["cor"], nivel_cor(m["fim"], Decimal("225"), Decimal("1500")))
+
+
+class ExtratoDiarioMensalTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("1000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("310"))
+        ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("4000"), dia=5,
+                                 tipo=ContaFixa.RECEITA, salario=True)
+        ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1500"), dia=5)
+        self.url = reverse("financas:painel", args=[self.conta.pk])
+
+    def test_abas_diario_e_mensal(self):
+        r = self.client.get(self.url + "?mes=2026-01&dia=2026-01-05")
+        self.assertContains(r, 'id="extrato"')
+        self.assertContains(r, 'id="mensal"')
+        self.assertContains(r, 'aria-controls="mensal"')
+        self.assertContains(r, 'href="?mes=2026-02#mensal"')            # tabela navega na aba mensal
+        self.assertContains(r, 'id="escolher-dia"')
+
+    def test_dia_mostra_entradas_e_saidas(self):
+        r = self.client.get(self.url + "?mes=2026-01&dia=2026-01-05")
+        dia = r.context["dia"]
+        self.assertEqual((dia.entradas, dia.total_saidas), (Decimal("4000"), Decimal("1510")))   # aluguel + 10 do dia a dia
+        self.assertContains(r, "Entradas")
+        self.assertContains(r, "Saídas")
+        self.assertContains(r, "+ R$ 4.000,00")
+        self.assertContains(r, "− R$ 1.510,00")

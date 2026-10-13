@@ -503,6 +503,7 @@ table.extrato { font-size: .88rem; }
 .selo-hoje { font-size: .65rem; font-weight: 700; text-transform: uppercase; background: var(--marca-700); color: #fff; padding: 1px 6px; border-radius: 99px; margin-left: 4px; }
 .col-mov { max-width: 230px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .extrato td.num { white-space: nowrap; }
+.extrato tr > :last-child { padding-right: 18px !important; }
 .chip { display: inline-block; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
         font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin: 1px 4px 1px 0; background: var(--sup-3); color: var(--muted); }
 .chip-in { background: var(--pos-bg); color: var(--pos); }
@@ -664,8 +665,10 @@ tr.inativa td { opacity: .5; }
 @media (max-width: 640px) {
   .acoes-conf { flex-direction: column; align-items: stretch; }
 }
+.so-curto { display: none; }
 @media (max-width: 520px) {
   .so-largo { display: none; }
+  .so-curto { display: inline; }
   .aba { padding: 10px 10px; font-size: .9rem; }
   .kpis { gap: 8px; }
   .kpi { padding: 12px; }
@@ -1264,3 +1267,28 @@ details.encerrar > summary::-webkit-details-marker { display: none; }
 .resultado-mes small { color: var(--muted); }
 .linha-do-tempo li { grid-template-columns: 1fr auto auto; }
 .linha-do-tempo small { white-space: nowrap; }
+
+/* ==========================================================================
+   Extrato diário (um dia em foco) e Extrato mensal (tabela do mês)
+   ========================================================================== */
+main:has(.dia-layout), main:has(.mensal-layout) { max-width: 1360px; }
+.dia-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; scroll-margin-top: 70px; }
+.dia-layout .detalhe-dia { position: static; padding: 22px; }
+.dia-layout .detalhe-cab h2 { font-size: 1.6rem; }
+.coluna-mapa { position: sticky; top: 72px; display: grid; gap: 12px; }
+.dia-escolha { display: flex; gap: 8px; justify-content: center; align-items: center; margin-top: -6px; }
+.dia-escolha input { padding: 6px 8px; font-size: .88rem; }
+.grupo-mov { padding: 10px 0 4px !important; border-bottom: 0 !important; }
+.grupo-mov dt { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted) !important; }
+.grupo-mov dd { font-size: .85rem; font-weight: 700; }
+.mensal-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.mensal-layout .extrato-card { margin: 0; }
+.mensal-layout .extrato td, .mensal-layout .extrato thead th, .mensal-layout .extrato tfoot td { padding-left: 7px; padding-right: 7px; }
+.resumo-mes-card { margin: 0; padding: 16px; position: sticky; top: 72px; }
+.resumo-mes-card h3 { margin: 0 0 4px; font-size: .98rem; }
+.resumo-mes-card .resultado-mes { margin-top: 8px; }
+@media (max-width: 1000px) {
+  .dia-layout, .mensal-layout { grid-template-columns: minmax(0, 1fr); }
+  .coluna-mapa, .resumo-mes-card { position: static; }
+  .resumo-mes-card { order: -1; }
+}

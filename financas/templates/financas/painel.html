@@ -50,7 +50,8 @@
 </div>
 
 <nav class="abas" role="tablist" aria-label="Seções da conta">
-  <a class="aba" role="tab" href="#extrato" id="aba-extrato" aria-controls="extrato"><span>Extrato<span class="so-largo"> diário</span></span></a>
+  <a class="aba" role="tab" href="#extrato" id="aba-extrato" aria-controls="extrato"><span><span class="so-largo">Extrato diário</span><span class="so-curto">Dia</span></span></a>
+  <a class="aba" role="tab" href="#mensal" id="aba-mensal" aria-controls="mensal"><span><span class="so-largo">Extrato mensal</span><span class="so-curto">Mês</span></span></a>
   <a class="aba" role="tab" href="#contas" id="aba-contas" aria-controls="contas"><span>Contas<span class="so-largo"> e vencimentos</span></span> <span class="contador">{{ recorrentes|length }}</span></a>
   <a class="aba" role="tab" href="#cartoes" id="aba-cartoes" aria-controls="cartoes"><span>Cartões<span class="so-largo"> e lançamentos</span></span>{% if compras %} <span class="contador">{{ compras|length }}</span>{% endif %}</a>
   <a class="aba" role="tab" href="#investimentos" id="aba-investimentos" aria-controls="investimentos">Investimentos</a>
@@ -58,182 +59,7 @@
 </nav>
 
 <div class="aba-painel" role="tabpanel" id="extrato" aria-labelledby="aba-extrato">
-<section class="extrato-layout">
-  <div class="card extrato-card">
-    <div class="extrato-cab">
-      <h2>Extrato diário</h2>
-      <nav class="mes-nav" aria-label="Mês">
-        <a class="btn fantasma" href="?mes={{ mes_anterior }}#extrato" aria-label="Mês anterior">‹</a>
-        <span class="mes-nome">{{ mes|date:"F \d\e Y"|capfirst }}</span>
-        <a class="btn fantasma" href="?mes={{ mes_seguinte }}#extrato" aria-label="Próximo mês">›</a>
-        {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec" href="?mes={{ mes_hoje }}#extrato">Hoje</a>{% endif %}
-      </nav>
-    </div>
-
-    <div class="tabela-rolagem">
-      <table class="extrato">
-        <thead>
-          <tr>
-            <th>Dia</th>
-            <th class="col-mov">Movimentações</th>
-            <th class="num col-opc">Entradas</th>
-            <th class="num col-opc">Saídas</th>
-            <th class="num col-opc" title="Dinheiro do dia a dia usado">Dia a dia</th>
-            <th class="num">Saldo esperado</th>
-            <th class="num">Real</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in dias %}
-          <tr class="{% if d == dia %}selecionado {% endif %}{% if d.data == hoje %}hoje {% endif %}{% if d.fim_de_semana %}fds {% endif %}{% if not d.ativo %}inativo {% endif %}{% if d.data > hoje %}futuro{% endif %}"
-              data-href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato">
-            <td class="col-dia">
-              <a href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato">
-                <b>{{ d.data|date:"d" }}</b><span>{{ d.data|date:"D"|lower }}</span>
-                <span class="pontos" aria-hidden="true">{% if d.entradas %}<i class="ponto-in"></i>{% endif %}{% if d.saidas %}<i class="ponto-out"></i>{% endif %}</span>
-              </a>
-              {% if d.data == hoje %}<span class="selo-hoje">hoje</span>{% endif %}
-            </td>
-            <td class="col-mov">
-              {% for m in d.movimentos|slice:":2" %}<span class="chip {% if m.entrada %}chip-in{% else %}chip-out{% endif %}{% if m.evento.estimado %} chip-estimado{% endif %}"{% if m.evento.estimado %} title="Valor estimado"{% endif %}>{% if m.evento.estimado %}≈ {% endif %}{{ m.nome }}</span>{% endfor %}
-              {% if d.movimentos|length > 2 %}<span class="chip">+{{ d.movimentos|length|add:"-2" }}</span>{% endif %}
-            </td>
-            {% if d.ativo %}
-            <td class="num col-opc pos">{% if d.entradas %}{{ d.entradas|brl }}{% endif %}</td>
-            <td class="num col-opc neg">{% if d.saidas %}{{ d.saidas|brl }}{% endif %}</td>
-            <td class="num col-opc col-uso" title="Disponível: {{ d.disponivel|brl }}">
-              {% if d.itens %}<span class="uso-icone ok" title="{{ d.itens|length }} gasto{{ d.itens|length|pluralize }} lançado{{ d.itens|length|pluralize }}">≡</span>{{ d.gasto|brl }}
-              {% elif d.uso.situacao == "nada" %}<span class="uso-tag nada">não usou</span>
-              {% elif d.uso.situacao == "parte" %}<span class="uso-icone" aria-label="outro valor">◐</span>{{ d.gasto|brl }}
-              {% elif d.uso %}<span class="uso-icone ok" aria-label="usou tudo">✓</span>{{ d.gasto|brl }}
-              {% else %}<span class="suave">{{ d.gasto|brl }}</span>{% endif %}
-            </td>
-            <td class="num forte"><span class="saldo-cor c-{{ d.cor }}">{{ d.esperado|brl }}</span></td>
-            <td class="num">
-              {% if d.conferencia %}
-                <span class="real {% if d.diferenca < 0 %}neg{% else %}pos{% endif %}" title="Diferença: {{ d.diferenca|brl }}">{{ d.conferencia.saldo_real|brl }}</span>
-              {% endif %}
-            </td>
-            {% else %}
-            <td class="num col-opc"></td><td class="num col-opc"></td><td class="num col-opc"></td>
-            <td class="num suave">—</td><td></td>
-            {% endif %}
-          </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td>Total do mês</td><td class="col-mov"></td>
-            <td class="num col-opc pos">{{ totais.entradas|brl }}</td>
-            <td class="num col-opc neg">{{ totais.saidas|brl }}</td>
-            <td class="num col-opc">{{ totais.gasto|brl }}</td>
-            <td colspan="2" class="num">{% if totais_mes %}<span class="rodape-sobra">sobra <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{{ totais_mes.sobra|brl }}</b></span>{% endif %}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-
-  <div class="coluna-dia">
-  <div class="card mapa-mes">
-    <div class="mapa-cab">
-      <div>
-        <h3>Mapa do mês</h3>
-        <span class="rotulo">saldo esperado ao fim de cada dia</span>
-      </div>
-      {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec mapa-hoje" href="?mes={{ mes_hoje }}#extrato">Hoje</a>{% endif %}
-    </div>
-    <nav class="mapa-nav" aria-label="Mês do mapa">
-      {% if pode_voltar %}
-        <a class="btn fantasma" href="?mes={{ mes_anterior }}#extrato" aria-label="Mês anterior" title="Mês anterior">‹</a>
-      {% else %}
-        <span class="btn fantasma desativado" aria-disabled="true" title="O cálculo começa em {{ conta.data_inicio|date:'d/m/Y' }}">‹</span>
-      {% endif %}
-      <button type="button" class="mes-escolher" id="mes-escolher" aria-expanded="false" aria-controls="seletor-mes">
-        {{ mes|date:"F \d\e Y"|capfirst }} <span aria-hidden="true">▾</span>
-      </button>
-      <a class="btn fantasma" href="?mes={{ mes_seguinte }}#extrato" aria-label="Próximo mês" title="Próximo mês">›</a>
-    </nav>
-
-    <div class="seletor-mes" id="seletor-mes" role="dialog" aria-label="Escolher mês" hidden>
-      <div class="seletor-ano">
-        <button type="button" class="btn fantasma" data-ano-passo="-1" aria-label="Ano anterior">‹</button>
-        <strong id="seletor-ano-nome">{{ mes.year }}</strong>
-        <button type="button" class="btn fantasma" data-ano-passo="1" aria-label="Próximo ano">›</button>
-      </div>
-      {% for a in anos_seletor %}
-      <div class="seletor-grade" data-ano="{{ a.ano }}"{% if a.ano != mes.year %} hidden{% endif %}>
-        {% for m in a.meses %}
-          {% if m.ativo %}
-          <a class="seletor-m c-{{ m.cor }}{% if m.data == mes %} sel{% endif %}{% if m.futuro %} futuro{% endif %}{% if m.aberto %} aberto{% endif %}"
-             href="?mes={{ m.data|date:'Y-m' }}#extrato"
-             data-tip="{% if m.futuro or m.aberto %}Deve fechar com{% else %}Fechou com{% endif %} {{ m.fim|brl }}"
-             aria-label="{{ m.data|date:'F \d\e Y' }}: {% if m.futuro or m.aberto %}deve fechar com{% else %}fechou com{% endif %} {{ m.fim|brl }}">{{ m.data|date:"b"|capfirst }}</a>
-          {% else %}
-          <span class="seletor-m inativo" title="Antes do início do cálculo">{{ m.data|date:"b"|capfirst }}</span>
-          {% endif %}
-        {% endfor %}
-      </div>
-      {% endfor %}
-      <p class="legenda-nota">Cor = saldo no fim de cada mês (mesma escala do mapa). Tracejado = previsão.</p>
-    </div>
-    <div class="mapa">
-      {% for s in "STQQSSD" %}<span class="mapa-semana" aria-hidden="true">{{ s }}</span>{% endfor %}
-      {% for _ in vazios_inicio %}<span class="mapa-vazio" aria-hidden="true"></span>{% endfor %}
-      {% for d in dias %}
-        {% if d.ativo %}
-        <a class="mapa-dia c-{{ d.cor }}{% if d == dia %} sel{% endif %}{% if d.data > hoje %} futuro{% endif %}{% if d.data == hoje %} hoje{% endif %}"
-           href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato"
-           data-tip="{{ d.data|date:'d/m' }} · {{ d.esperado|brl }}"
-           aria-label="{{ d.data|date:'j \d\e F' }}: saldo esperado {{ d.esperado|brl }}">{{ d.data.day }}</a>
-        {% else %}
-        <span class="mapa-dia inativo" title="Antes do início do cálculo">{{ d.data.day }}</span>
-        {% endif %}
-      {% endfor %}
-    </div>
-    <div class="legenda" aria-label="Legenda das cores">
-      <div class="legenda-faixa quatro">
-        <div title="negativo"><span class="c-n5"></span><span class="c-n4"></span></div>
-        <div title="quase acabando: abaixo de {{ legenda.quase|brl }}"><span class="c-n3"></span></div>
-        <div title="atenção: abaixo da reserva de {{ legenda.reserva|brl }}"><span class="c-n2"></span><span class="c-n1"></span></div>
-        <div title="acima da reserva"><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
-      </div>
-      <div class="legenda-grupos quatro">
-        <span><b>Negativo</b>&lt; R$ 0</span>
-        <span><b>Quase</b>&lt; {{ legenda.quase|brl }}</span>
-        <span><b>Atenção</b>&lt; {{ legenda.reserva|brl }}</span>
-        <span><b>Confortável</b>escuro ≥ {{ legenda.verde_forte|brl }}</span>
-      </div>
-      <p class="legenda-nota">Reserva mínima: {{ legenda.reserva|brl }} (<a href="{% url 'financas:conta_editar' conta.pk %}#reserva">alterar</a>). Contorno tracejado = previsão.</p>
-    </div>
-
-    {% if totais_mes %}
-    <div class="resultado-mes">
-      <div><span>Recebido</span><b class="pos">{{ totais_mes.recebido|brl }}</b></div>
-      <div><span>− Gasto</span><b class="neg">{{ totais_mes.gasto|brl }}</b></div>
-      <div><span>− Investido</span><b class="investido">{{ totais_mes.guardado|brl }}</b></div>
-      <div class="resultado-total"><span>= Sobra do mês</span>
-        <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{% if totais_mes.sobra > 0 %}+{% endif %}{{ totais_mes.sobra|brl }}</b></div>
-      <small>O investido não é gasto, mas sai do orçamento do mês.</small>
-    </div>
-    {% endif %}
-    {% if resumo_mes %}
-    <dl class="resumo-mes">
-      <div><dt>Começou com</dt><dd>{{ resumo_mes.inicio|brl }}</dd></div>
-      <div><dt>{% if resumo_mes.encerrado %}Terminou com{% else %}Deve terminar com{% endif %}</dt>
-        <dd class="{% if resumo_mes.fim < 0 %}neg{% endif %}">{{ resumo_mes.fim|brl }}
-          <small class="{% if resumo_mes.variacao < 0 %}neg{% else %}pos{% endif %}">{% if resumo_mes.variacao > 0 %}+{% endif %}{{ resumo_mes.variacao|brl }}</small></dd></div>
-      <div><dt>Menor saldo</dt>
-        <dd class="{% if resumo_mes.menor.esperado < 0 %}neg{% endif %}">{{ resumo_mes.menor.esperado|brl }}
-          <small><a href="?mes={{ mes|date:'Y-m' }}&dia={{ resumo_mes.menor.data|date:'Y-m-d' }}#extrato">dia {{ resumo_mes.menor.data|date:"d" }}</a></small></dd></div>
-      <div><dt>Dias no negativo</dt>
-        <dd class="{% if resumo_mes.dias_negativos %}neg{% else %}pos{% endif %}">{{ resumo_mes.dias_negativos }} de {{ resumo_mes.dias }}</dd></div>
-    </dl>
-    {% else %}
-    <p class="vazio">Este mês é anterior ao início do cálculo ({{ conta.data_inicio|date:"d/m/Y" }}).</p>
-    {% endif %}
-  </div>
-
+<section class="dia-layout">
   <aside class="card detalhe-dia" aria-label="Detalhes do dia">
     <div class="detalhe-cab">
       <a class="btn fantasma" href="?mes={{ dia_anterior|date:'Y-m' }}&dia={{ dia_anterior|date:'Y-m-d' }}#extrato" aria-label="Dia anterior">‹</a>
@@ -242,6 +68,11 @@
         <h2>{{ dia.data|date:"j \d\e F"|lower }}</h2>
       </div>
       <a class="btn fantasma" href="?mes={{ dia_seguinte|date:'Y-m' }}&dia={{ dia_seguinte|date:'Y-m-d' }}#extrato" aria-label="Próximo dia">›</a>
+    </div>
+    <div class="dia-escolha">
+      <label class="sr" for="escolher-dia">Escolher dia</label>
+      <input type="date" id="escolher-dia" value="{{ dia.data|date:'Y-m-d' }}">
+      {% if dia.data != hoje %}<a class="btn sec" href="?dia={{ hoje|date:'Y-m-d' }}#extrato">Hoje</a>{% endif %}
     </div>
     <div class="selos">
       {% if dia.data == hoje %}<span class="etiqueta">Hoje</span>{% elif dia.data > hoje %}<span class="etiqueta neutra">Previsão</span>{% endif %}
@@ -253,101 +84,12 @@
     {% else %}
       <dl class="detalhe-linhas">
         <div><dt>Saldo no início do dia</dt><dd>{{ dia.inicio|brl }}</dd></div>
-        {% for m in dia.movimentos %}
-        {% if m.origem == "guardar" %}
-        <div class="mov">
-          <dt><a href="#investimentos">{{ m.nome }}</a>
-            <small>{% if m.objeto.avulso %}valor avulso{% elif m.objeto.confirmado %}confirmado por você{% else %}previsto para o dia de maior saldo de {{ mes|date:"F"|lower }}{% endif %}</small></dt>
-          <dd class="neg">− {{ m.valor|brl }}</dd>
-        </div>
-        {% elif m.origem == "fatura" %}
-        <div class="mov fatura">
-          <dt><span class="fatura-nome">{{ m.nome }}</span>
-            <small>fecha {{ m.objeto.fechamento|date:"d/m" }} · {% with n=m.objeto.quantidade %}{{ n }} {% if n == 1 %}item{% else %}itens{% endif %}{% endwith %}</small>
-            <ul class="fatura-itens">
-              {% for p in m.objeto.parcelas %}
-              <li><a href="{% url 'financas:compra_editar' p.compra.pk %}">{{ p.compra.descricao }}</a>
-                {% if p.compra.parcelas > 1 %}<span class="parcela-tag">{{ p.rotulo }}</span>{% endif %}
-                <span class="fatura-valor">{{ p.valor|brl }}</span></li>
-              {% endfor %}
-              {% for c in m.objeto.cobrancas %}
-              <li><a href="{% url 'financas:assinatura_editar' c.assinatura.pk %}">{{ c.assinatura.descricao }}</a>
-                <span class="parcela-tag">mensal</span>
-                <span class="fatura-valor">{{ c.valor|brl }}</span></li>
-              {% endfor %}
-            </ul></dt>
-          <dd class="neg">− {{ m.valor|brl }}</dd>
-        </div>
-        {% else %}
-        <div class="mov">
-          <dt><a href="{% url 'financas:item_editar' m.origem m.objeto.pk %}">{{ m.nome }}</a>
-            <small>{% if m.origem == "fixa" %}{% if m.objeto.periodica %}a cada {{ m.objeto.intervalo_dias }} dias · {% if m.evento.pagamento %}{% if m.entrada %}recebido{% else %}feito{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (previsto {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}previsto{% endif %}{% elif m.objeto.variavel %}conta variável · {% if m.evento.pagamento %}{% if m.entrada %}recebida{% else %}paga{% endif %} em {{ m.evento.pagamento.data|date:"d/m" }}{% if m.evento.pagamento.data != m.evento.vencimento %} (vence {{ m.evento.vencimento|date:"d/m" }}){% endif %}{% else %}estimativa, vence {{ m.evento.vencimento|date:"d/m" }}{% endif %}{% elif m.evento.ajustado %}conta fixa · ajustada neste mês (normalmente {{ m.objeto.valor|brl }}{% if m.evento.pagamento.data != m.evento.vencimento %}, dia {{ m.evento.vencimento|date:"d/m" }}{% endif %}){% else %}conta fixa{% endif %}{% else %}lançamento avulso{% endif %}</small>
-            {% if m.origem == "fixa" and not m.objeto.marcavel %}
-              {% if m.evento.ajustado %}
-              <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
-                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                <span class="ajuste-selo">ajustado</span>
-                <button type="submit" class="acao-item">Desfazer ajuste</button>
-              </form>
-              {% else %}
-              <details class="ajuste-mes">
-                <summary class="acao-item">Alterar só neste mês</summary>
-                <form method="post" action="{% url 'financas:pagamento_registrar' m.objeto.pk %}" class="pagar-form">{% csrf_token %}
-                  <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
-                  <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                  <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
-                    <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required
-                           value="{{ m.valor|stringformat:'s' }}" aria-label="Valor de {{ m.nome }} só neste mês">
-                  </div>
-                  <input type="date" name="data" value="{{ m.evento.vencimento|date:'Y-m-d' }}" aria-label="Data neste mês" required>
-                  <button type="submit" class="btn">Salvar</button>
-                </form>
-              </details>
-              {% endif %}
-            {% endif %}
-            {% if m.origem == "fixa" and m.objeto.marcavel %}
-              {% if m.evento.pagamento %}
-              <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
-                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                <span class="pago-selo">✓ {% if m.entrada %}recebida{% elif m.objeto.periodica %}feito{% else %}paga{% endif %}</span>
-                <button type="submit" class="acao-item">Desfazer</button>
-              </form>
-              {% else %}
-              <form method="post" action="{% url 'financas:pagamento_registrar' m.objeto.pk %}" class="pagar-form">{% csrf_token %}
-                <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
-                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
-                  <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required
-                         value="{{ m.valor|stringformat:'s' }}" aria-label="Valor {% if m.entrada %}recebido{% else %}pago{% endif %} de {{ m.nome }}">
-                </div>
-                <input type="date" name="data" value="{% if m.evento.vencimento > hoje %}{{ hoje|date:'Y-m-d' }}{% else %}{{ m.evento.vencimento|date:'Y-m-d' }}{% endif %}" aria-label="Data do pagamento" required>
-                <button type="submit" class="btn">{% if m.entrada %}Recebi{% elif m.objeto.periodica %}Comprei{% else %}Paguei{% endif %}</button>
-              </form>
-              {% endif %}
-            {% endif %}
-            {% if m.origem == "fixa" %}
-            <span class="acoes-item">
-              <a href="{% url 'financas:item_editar' 'fixa' m.objeto.pk %}?voltar=dia:{{ dia.data|date:'Y-m-d' }}" class="acao-item">Editar</a>
-              <form method="post" action="{% url 'financas:item_excluir' 'fixa' m.objeto.pk %}"
-                    onsubmit="return confirm('Excluir a conta fixa “{{ m.nome|escapejs }}”? Ela sai de todos os meses, inclusive dos que já passaram.')">{% csrf_token %}
-                <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
-                <button type="submit" class="acao-item perigo-texto">Excluir</button>
-              </form>
-            </span>
-            {% endif %}
-            {% if m.origem == "lancamento" %}
-            <span class="acoes-item">
-              <a href="{% url 'financas:item_editar' 'lancamento' m.objeto.pk %}" class="acao-item">Editar</a>
-              <form method="post" action="{% url 'financas:item_excluir' 'lancamento' m.objeto.pk %}"
-                    onsubmit="return confirm('Excluir o lançamento “{{ m.nome|escapejs }}” de {{ m.valor|brl }}?')">{% csrf_token %}
-                <button type="submit" class="acao-item perigo-texto">Excluir</button>
-              </form>
-            </span>
-            {% endif %}</dt>
-          <dd class="{% if m.entrada %}pos{% else %}neg{% endif %}">{% if m.evento.estimado or m.objeto.periodica and not m.evento.pagamento %}≈ {% endif %}{% if m.entrada %}+{% else %}−{% endif %} {{ m.valor|brl }}</dd>
-        </div>
+        {% if dia.entradas %}
+        <div class="grupo-mov"><dt>Entradas</dt><dd class="pos">+ {{ dia.entradas|brl }}</dd></div>
+        {% for m in dia.movimentos %}{% if m.entrada %}{% include "financas/_movimento.html" %}{% endif %}{% endfor %}
         {% endif %}
-        {% endfor %}
+        <div class="grupo-mov"><dt>Saídas</dt><dd class="neg">− {{ dia.total_saidas|brl }}</dd></div>
+        {% for m in dia.movimentos %}{% if not m.entrada %}{% include "financas/_movimento.html" %}{% endif %}{% endfor %}
         <div class="mov">
           <dt>Dinheiro do dia a dia
             <small>{% if dia.itens %}{{ dia.itens|length }} gasto{{ dia.itens|length|pluralize }} lançado{{ dia.itens|length|pluralize }}{% elif dia.uso.situacao == "nada" %}não usado{% elif dia.uso.situacao == "parte" %}usado em parte{% elif dia.uso %}usado{% elif dia.data > hoje %}previsto{% else %}não informado, conta como usado{% endif %}</small></dt>
@@ -474,7 +216,189 @@
       </div>
     {% endif %}
   </aside>
+  <div class="coluna-mapa">
+  <div class="card mapa-mes">
+    <div class="mapa-cab">
+      <div>
+        <h3>Mapa do mês</h3>
+        <span class="rotulo">saldo esperado ao fim de cada dia</span>
+      </div>
+      {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec mapa-hoje" href="?mes={{ mes_hoje }}#extrato">Hoje</a>{% endif %}
+    </div>
+    <nav class="mapa-nav" aria-label="Mês do mapa">
+      {% if pode_voltar %}
+        <a class="btn fantasma" href="?mes={{ mes_anterior }}#extrato" aria-label="Mês anterior" title="Mês anterior">‹</a>
+      {% else %}
+        <span class="btn fantasma desativado" aria-disabled="true" title="O cálculo começa em {{ conta.data_inicio|date:'d/m/Y' }}">‹</span>
+      {% endif %}
+      <button type="button" class="mes-escolher" id="mes-escolher" aria-expanded="false" aria-controls="seletor-mes">
+        {{ mes|date:"F \d\e Y"|capfirst }} <span aria-hidden="true">▾</span>
+      </button>
+      <a class="btn fantasma" href="?mes={{ mes_seguinte }}#extrato" aria-label="Próximo mês" title="Próximo mês">›</a>
+    </nav>
+
+    <div class="seletor-mes" id="seletor-mes" role="dialog" aria-label="Escolher mês" hidden>
+      <div class="seletor-ano">
+        <button type="button" class="btn fantasma" data-ano-passo="-1" aria-label="Ano anterior">‹</button>
+        <strong id="seletor-ano-nome">{{ mes.year }}</strong>
+        <button type="button" class="btn fantasma" data-ano-passo="1" aria-label="Próximo ano">›</button>
+      </div>
+      {% for a in anos_seletor %}
+      <div class="seletor-grade" data-ano="{{ a.ano }}"{% if a.ano != mes.year %} hidden{% endif %}>
+        {% for m in a.meses %}
+          {% if m.ativo %}
+          <a class="seletor-m c-{{ m.cor }}{% if m.data == mes %} sel{% endif %}{% if m.futuro %} futuro{% endif %}{% if m.aberto %} aberto{% endif %}"
+             href="?mes={{ m.data|date:'Y-m' }}#extrato"
+             data-tip="{% if m.futuro or m.aberto %}Deve fechar com{% else %}Fechou com{% endif %} {{ m.fim|brl }}"
+             aria-label="{{ m.data|date:'F \d\e Y' }}: {% if m.futuro or m.aberto %}deve fechar com{% else %}fechou com{% endif %} {{ m.fim|brl }}">{{ m.data|date:"b"|capfirst }}</a>
+          {% else %}
+          <span class="seletor-m inativo" title="Antes do início do cálculo">{{ m.data|date:"b"|capfirst }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <p class="legenda-nota">Cor = saldo no fim de cada mês (mesma escala do mapa). Tracejado = previsão.</p>
+    </div>
+    <div class="mapa">
+      {% for s in "STQQSSD" %}<span class="mapa-semana" aria-hidden="true">{{ s }}</span>{% endfor %}
+      {% for _ in vazios_inicio %}<span class="mapa-vazio" aria-hidden="true"></span>{% endfor %}
+      {% for d in dias %}
+        {% if d.ativo %}
+        <a class="mapa-dia c-{{ d.cor }}{% if d == dia %} sel{% endif %}{% if d.data > hoje %} futuro{% endif %}{% if d.data == hoje %} hoje{% endif %}"
+           href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato"
+           data-tip="{{ d.data|date:'d/m' }} · {{ d.esperado|brl }}"
+           aria-label="{{ d.data|date:'j \d\e F' }}: saldo esperado {{ d.esperado|brl }}">{{ d.data.day }}</a>
+        {% else %}
+        <span class="mapa-dia inativo" title="Antes do início do cálculo">{{ d.data.day }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="legenda" aria-label="Legenda das cores">
+      <div class="legenda-faixa quatro">
+        <div title="negativo"><span class="c-n5"></span><span class="c-n4"></span></div>
+        <div title="quase acabando: abaixo de {{ legenda.quase|brl }}"><span class="c-n3"></span></div>
+        <div title="atenção: abaixo da reserva de {{ legenda.reserva|brl }}"><span class="c-n2"></span><span class="c-n1"></span></div>
+        <div title="acima da reserva"><span class="c-p1"></span><span class="c-p2"></span><span class="c-p3"></span><span class="c-p4"></span></div>
+      </div>
+      <div class="legenda-grupos quatro">
+        <span><b>Negativo</b>&lt; R$ 0</span>
+        <span><b>Quase</b>&lt; {{ legenda.quase|brl }}</span>
+        <span><b>Atenção</b>&lt; {{ legenda.reserva|brl }}</span>
+        <span><b>Confortável</b>escuro ≥ {{ legenda.verde_forte|brl }}</span>
+      </div>
+      <p class="legenda-nota">Reserva mínima: {{ legenda.reserva|brl }} (<a href="{% url 'financas:conta_editar' conta.pk %}#reserva">alterar</a>). Contorno tracejado = previsão.</p>
+    </div>
+
   </div>
+  </div>
+</section>
+</div>
+
+<div class="aba-painel" role="tabpanel" id="mensal" aria-labelledby="aba-mensal">
+<section class="mensal-layout">
+  <div class="card extrato-card">
+    <div class="extrato-cab">
+      <h2>Extrato do mês</h2>
+      <nav class="mes-nav" aria-label="Mês">
+        <a class="btn fantasma" href="?mes={{ mes_anterior }}#mensal" aria-label="Mês anterior">‹</a>
+        <span class="mes-nome">{{ mes|date:"F \d\e Y"|capfirst }}</span>
+        <a class="btn fantasma" href="?mes={{ mes_seguinte }}#mensal" aria-label="Próximo mês">›</a>
+        {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec" href="?mes={{ mes_hoje }}#mensal">Hoje</a>{% endif %}
+      </nav>
+    </div>
+
+    <div class="tabela-rolagem">
+      <table class="extrato">
+        <thead>
+          <tr>
+            <th>Dia</th>
+            <th class="col-mov">Movimentações</th>
+            <th class="num col-opc">Entradas</th>
+            <th class="num col-opc">Saídas</th>
+            <th class="num col-opc" title="Dinheiro do dia a dia usado">Dia a dia</th>
+            <th class="num">Saldo esperado</th>
+            <th class="num">Real</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dias %}
+          <tr class="{% if d == dia %}selecionado {% endif %}{% if d.data == hoje %}hoje {% endif %}{% if d.fim_de_semana %}fds {% endif %}{% if not d.ativo %}inativo {% endif %}{% if d.data > hoje %}futuro{% endif %}"
+              data-href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato">
+            <td class="col-dia">
+              <a href="?mes={{ mes|date:'Y-m' }}&dia={{ d.data|date:'Y-m-d' }}#extrato">
+                <b>{{ d.data|date:"d" }}</b><span>{{ d.data|date:"D"|lower }}</span>
+                <span class="pontos" aria-hidden="true">{% if d.entradas %}<i class="ponto-in"></i>{% endif %}{% if d.saidas %}<i class="ponto-out"></i>{% endif %}</span>
+              </a>
+              {% if d.data == hoje %}<span class="selo-hoje">hoje</span>{% endif %}
+            </td>
+            <td class="col-mov">
+              {% for m in d.movimentos|slice:":2" %}<span class="chip {% if m.entrada %}chip-in{% else %}chip-out{% endif %}{% if m.evento.estimado %} chip-estimado{% endif %}"{% if m.evento.estimado %} title="Valor estimado"{% endif %}>{% if m.evento.estimado %}≈ {% endif %}{{ m.nome }}</span>{% endfor %}
+              {% if d.movimentos|length > 2 %}<span class="chip">+{{ d.movimentos|length|add:"-2" }}</span>{% endif %}
+            </td>
+            {% if d.ativo %}
+            <td class="num col-opc pos">{% if d.entradas %}{{ d.entradas|brl }}{% endif %}</td>
+            <td class="num col-opc neg">{% if d.saidas %}{{ d.saidas|brl }}{% endif %}</td>
+            <td class="num col-opc col-uso" title="Disponível: {{ d.disponivel|brl }}">
+              {% if d.itens %}<span class="uso-icone ok" title="{{ d.itens|length }} gasto{{ d.itens|length|pluralize }} lançado{{ d.itens|length|pluralize }}">≡</span>{{ d.gasto|brl }}
+              {% elif d.uso.situacao == "nada" %}<span class="uso-tag nada">não usou</span>
+              {% elif d.uso.situacao == "parte" %}<span class="uso-icone" aria-label="outro valor">◐</span>{{ d.gasto|brl }}
+              {% elif d.uso %}<span class="uso-icone ok" aria-label="usou tudo">✓</span>{{ d.gasto|brl }}
+              {% else %}<span class="suave">{{ d.gasto|brl }}</span>{% endif %}
+            </td>
+            <td class="num forte"><span class="saldo-cor c-{{ d.cor }}">{{ d.esperado|brl }}</span></td>
+            <td class="num">
+              {% if d.conferencia %}
+                <span class="real {% if d.diferenca < 0 %}neg{% else %}pos{% endif %}" title="Diferença: {{ d.diferenca|brl }}">{{ d.conferencia.saldo_real|brl }}</span>
+              {% endif %}
+            </td>
+            {% else %}
+            <td class="num col-opc"></td><td class="num col-opc"></td><td class="num col-opc"></td>
+            <td class="num suave">—</td><td></td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total do mês</td><td class="col-mov"></td>
+            <td class="num col-opc pos">{{ totais.entradas|brl }}</td>
+            <td class="num col-opc neg">{{ totais.saidas|brl }}</td>
+            <td class="num col-opc">{{ totais.gasto|brl }}</td>
+            <td colspan="2" class="num">{% if totais_mes %}<span class="rodape-sobra">sobra <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{{ totais_mes.sobra|brl }}</b></span>{% endif %}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <aside class="card resumo-mes-card">
+    <h3>Resumo de {{ mes|date:"F"|lower }}</h3>
+    {% if totais_mes %}
+    <div class="resultado-mes">
+      <div><span>Recebido</span><b class="pos">{{ totais_mes.recebido|brl }}</b></div>
+      <div><span>− Gasto</span><b class="neg">{{ totais_mes.gasto|brl }}</b></div>
+      <div><span>− Investido</span><b class="investido">{{ totais_mes.guardado|brl }}</b></div>
+      <div class="resultado-total"><span>= Sobra do mês</span>
+        <b class="{% if totais_mes.sobra < 0 %}neg{% else %}pos{% endif %}">{% if totais_mes.sobra > 0 %}+{% endif %}{{ totais_mes.sobra|brl }}</b></div>
+      <small>O investido não é gasto, mas sai do orçamento do mês.</small>
+    </div>
+    {% endif %}
+    {% if resumo_mes %}
+    <dl class="resumo-mes">
+      <div><dt>Começou com</dt><dd>{{ resumo_mes.inicio|brl }}</dd></div>
+      <div><dt>{% if resumo_mes.encerrado %}Terminou com{% else %}Deve terminar com{% endif %}</dt>
+        <dd class="{% if resumo_mes.fim < 0 %}neg{% endif %}">{{ resumo_mes.fim|brl }}
+          <small class="{% if resumo_mes.variacao < 0 %}neg{% else %}pos{% endif %}">{% if resumo_mes.variacao > 0 %}+{% endif %}{{ resumo_mes.variacao|brl }}</small></dd></div>
+      <div><dt>Menor saldo</dt>
+        <dd class="{% if resumo_mes.menor.esperado < 0 %}neg{% endif %}">{{ resumo_mes.menor.esperado|brl }}
+          <small><a href="?mes={{ mes|date:'Y-m' }}&dia={{ resumo_mes.menor.data|date:'Y-m-d' }}#extrato">dia {{ resumo_mes.menor.data|date:"d" }}</a></small></dd></div>
+      <div><dt>Dias no negativo</dt>
+        <dd class="{% if resumo_mes.dias_negativos %}neg{% else %}pos{% endif %}">{{ resumo_mes.dias_negativos }} de {{ resumo_mes.dias }}</dd></div>
+    </dl>
+    {% else %}
+    <p class="vazio">Este mês é anterior ao início do cálculo ({{ conta.data_inicio|date:"d/m/Y" }}).</p>
+    {% endif %}
+  </aside>
 </section>
 
 {% if historico_meses %}
@@ -492,7 +416,7 @@
     <tbody>
     {% for m in historico_meses %}
     <tr class="{% if m.previsao %}previsto{% endif %}{% if m.aberto %} aberto{% endif %}">
-      <td><a href="?mes={{ m.mes|date:'Y-m' }}#extrato">{{ m.mes|date:"F/Y"|capfirst }}</a>
+      <td><a href="?mes={{ m.mes|date:'Y-m' }}#mensal">{{ m.mes|date:"F/Y"|capfirst }}</a>
         {% if m.atual %}<span class="etiqueta">este mês</span>{% elif m.previsao %}<span class="etiqueta neutra">previsão</span>{% endif %}</td>
       <td class="num pos">{{ m.recebido|brl }}</td>
       <td class="num neg">{{ m.gasto|brl }}</td>
@@ -1001,6 +925,12 @@
     abrir(location.hash.slice(1));
     window.addEventListener("hashchange", () => abrir(location.hash.slice(1)));
   })();
+
+  // escolher o dia pelo calendário do navegador
+  const escolher = document.getElementById("escolher-dia");
+  if (escolher) escolher.addEventListener("change", () => {
+    if (escolher.value) location.href = "?mes=" + escolher.value.slice(0, 7) + "&dia=" + escolher.value + "#extrato";
+  });
 
   // a linha inteira é clicável; o link do dia continua acessível pelo teclado
   document.querySelectorAll(".extrato tbody tr[data-href]").forEach((tr) => {
