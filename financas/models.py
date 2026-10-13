@@ -127,18 +127,28 @@ class Conta(models.Model):
     def __str__(self):
         return self.nome
 
-    @property
-    def reserva_automatica(self):
-        return (self.orcamento_mensal * self.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
+    def reserva_automatica_em(self, data):
+        return (self.orcamento_mensal_em(data) * self.DIAS_RESERVA_PADRAO / 30).quantize(Decimal("1"))
 
     @property
-    def reserva(self):
-        """Saldo mínimo confortável, conforme o modo escolhido."""
+    def reserva_automatica(self):
+        return self.reserva_automatica_em(date.today())
+
+    def reserva_em(self, data):
+        """Saldo mínimo confortável no mês de `data`, conforme o modo escolhido.
+
+        Em "% do salário" (e na automática, se o dia a dia for % do salário) ela acompanha
+        o salário daquele mês: se o salário cai, a margem cai junto.
+        """
         if self.reserva_modo == self.RESERVA_FIXO and self.reserva_minima is not None:
             return self.reserva_minima
         if self.reserva_modo == self.RESERVA_PERCENTUAL and self.reserva_percentual:
-            return (self.salario * self.reserva_percentual / 100).quantize(Decimal("1"))
-        return self.reserva_automatica
+            return (self.salario_em(data) * self.reserva_percentual / 100).quantize(Decimal("1"))
+        return self.reserva_automatica_em(data)
+
+    @property
+    def reserva(self):
+        return self.reserva_em(date.today())
 
     @property
     def quase_acabando(self):

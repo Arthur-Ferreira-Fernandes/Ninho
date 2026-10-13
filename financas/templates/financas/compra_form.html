@@ -227,18 +227,23 @@
   // ---------- mapa de datas ----------
   // mesma escala do painel (financas/calculos.py: nivel_cor): verdes acima da reserva,
   // amarelo/laranja abaixo dela, vermelho a partir de ¼ da reserva, mais escuro no negativo
-  const RESERVA = Math.round((PROJ.reserva || 0) * 100);
-  function nivelCor(v, ref) {
+  // reserva e salário de cada mês da projeção (acompanham aumentos e reduções de salário)
+  const chaveMes = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  const reservaEm = (d) => (PROJ.reservas || {})[chaveMes(d)] ?? Math.round((PROJ.reserva || 0) * 100);
+  let REF_SEM_SALARIO = 0;   // sem salário cadastrado: maior saldo acima da reserva
+  const refEm = (d) => ((PROJ.salarios || {})[chaveMes(d)] || 0) || REF_SEM_SALARIO;
+  function nivelCor(v, d) {
+    const reserva = reservaEm(d), ref = refEm(d);
     if (v < 0) {
-      const limite = RESERVA > 0 ? RESERVA / 2 : ref / 8;
+      const limite = reserva > 0 ? reserva / 2 : ref / 8;
       return limite > 0 && v <= -limite ? "n5" : "n4";
     }
-    if (v < RESERVA) {
-      if (v < RESERVA / 4) return "n3";     // quase acabando: o vermelho começa aqui
-      return v < RESERVA / 2 ? "n2" : "n1";
+    if (v < reserva) {
+      if (v < reserva / 4) return "n3";     // quase acabando: o vermelho começa aqui
+      return v < reserva / 2 ? "n2" : "n1";
     }
     if (ref <= 0) return "p4";
-    return "p" + Math.min(4, 1 + Math.floor((v - RESERVA) / (ref / 4)));
+    return "p" + Math.min(4, 1 + Math.floor((v - reserva) / (ref / 4)));
   }
   const MESES = [];   // [{ano, mes, ini, fim}] índices da projeção em cada mês
   for (let i = 0; i < SEM.length; i++) {
@@ -277,10 +282,18 @@
     el("mi-dias").querySelectorAll(".mapa-dia").forEach((c) => c.classList.toggle("sel", +c.dataset.i === i));
   }
 
+  function legendaDoMes(m) {
+    const d = new Date(m.ano, m.mes, 1, 12), reserva = reservaEm(d), ref = refEm(d);
+    el("mi-reserva").textContent = reais(reserva);
+    el("mi-quase").textContent = reais(Math.round(reserva / 4));
+    el("mi-forte").textContent = reais(reserva + ref * 3 / 4);
+  }
+
   function desenharMes() {
-    const { com, ref, porDia } = estado;
+    const { com, porDia } = estado;
     const m = MESES[mesAtual];
     el("mi-mes-nome").textContent = textoMes(m);
+    legendaDoMes(m);
     el("mi-ant").disabled = mesAtual === 0;
     el("mi-prox").disabled = mesAtual === MESES.length - 1;
     el("mi-meses").querySelectorAll("button").forEach((b, k) => b.classList.toggle("sel", k === mesAtual));
@@ -304,7 +317,7 @@
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.i = i;
-      b.className = "mapa-dia c-" + nivelCor(com[i], ref);
+      b.className = "mapa-dia c-" + nivelCor(com[i], dataDoIndice(i));
       if (porDia[i]) b.classList.add("tem-parcela");
       const alerta = com[i] < 0 && SEM[i] >= 0;
       if (alerta) b.classList.add("alerta-compra");
@@ -323,18 +336,14 @@
 
   function desenharMapa(com, parcelas, n) {
     // referência dos verdes: um salário acima da reserva; sem salário, o maior saldo
-    const salarioCentavos = Math.round(PROJ.salario * 100);
-    const ref = salarioCentavos > 0 ? salarioCentavos : Math.max(0, ...SEM.concat(com).map((v) => v - RESERVA));
+    REF_SEM_SALARIO = Math.max(0, ...SEM.concat(com).map((v, i) => v - reservaEm(dataDoIndice(i % SEM.length))));
     const porDia = {};
     parcelas.forEach((p) => {
       if (!p.conta) return;
       const i = indiceDaData(p.vencimento);
       if (i >= 0 && i < SEM.length) (porDia[i] = porDia[i] || []).push(p);
     });
-    estado = { com, ref, porDia, n };
-    el("mi-reserva").textContent = reais(RESERVA);
-    el("mi-quase").textContent = reais(Math.round(RESERVA / 4));
-    el("mi-forte").textContent = reais(RESERVA + ref * 3 / 4);
+    estado = { com, porDia, n };
 
     // faixa dos meses: cor do saldo no fim de cada mês
     const faixa = el("mi-meses");
@@ -345,7 +354,7 @@
       const temParcela = Object.keys(porDia).some((i) => i >= m.ini && i <= m.fim);
       let negPorCompra = false;
       for (let i = m.ini; i <= m.fim; i++) if (com[i] < 0 && SEM[i] >= 0) { negPorCompra = true; break; }
-      b.className = "mi-mes c-" + nivelCor(com[m.fim], ref) + (temParcela ? " tem-parcela" : "") + (negPorCompra ? " alerta-compra" : "");
+      b.className = "mi-mes c-" + nivelCor(com[m.fim], dataDoIndice(m.fim)) + (temParcela ? " tem-parcela" : "") + (negPorCompra ? " alerta-compra" : "");
       b.textContent = textoMes(m, true);
       b.title = textoMes(m) + ": fecha com " + reais(com[m.fim]) + " (sem a compra " + reais(SEM[m.fim]) + ")";
       b.addEventListener("click", () => { mesAtual = k; mesEscolhido = true; diaFoco = null; desenharMes(); });

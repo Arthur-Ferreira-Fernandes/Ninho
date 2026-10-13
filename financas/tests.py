@@ -1817,3 +1817,62 @@ class RecebidoMenosGastoTests(TestCase):
         self.assertTrue(any(m["atual"] for m in historico))
         self.assertTrue(all(m["previsao"] for m in historico if m["mes"] > date.today().replace(day=1)))
         self.assertEqual(len([m for m in historico if m["previsao"]]), 2)
+
+
+class ReservaPorMesTests(TestCase):
+    """Reserva em % do salário acompanha o salário de cada mês."""
+
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        hoje = date.today()
+        self.mes_atual = hoje.replace(day=1)
+        ano, mes = divmod(hoje.year * 12 + hoje.month, 12)   # mês seguinte
+        self.mes_queda = date(ano, mes + 1, 1)
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("500"),
+                                          data_inicio=self.mes_atual, gasto_mensal=Decimal("0"),
+                                          reserva_modo=Conta.RESERVA_PERCENTUAL, reserva_percentual=Decimal("15"))
+        # recebe 7000 até o fim deste mês; 1500 a partir do próximo (salário cai no último dia)
+        ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("7000"), dia=31, tipo=ContaFixa.RECEITA,
+                                 salario=True, vigente_ate=self.mes_queda - timedelta(days=1))
+        ContaFixa.objects.create(conta=self.conta, nome="Salário menor", valor=Decimal("1500"), dia=31,
+                                 tipo=ContaFixa.RECEITA, salario=True, vigente_desde=self.mes_queda)
+
+    def nova(self):
+        return Conta.objects.get(pk=self.conta.pk)
+
+    def test_reserva_de_cada_mes(self):
+        conta = self.nova()
+        self.assertEqual(conta.reserva_em(self.mes_atual), Decimal("1050"))
+        self.assertEqual(conta.reserva_em(self.mes_queda), Decimal("225"))
+        self.assertEqual(conta.reserva, Decimal("1050"))
+
+    def test_mesmo_saldo_cor_diferente_por_mes(self):
+        conta = self.nova()
+        este = extrato_mes(conta, self.mes_atual.year, self.mes_atual.month)
+        aplicar_escala(este, conta)
+        # 500 de saldo: abaixo da reserva de 1050 (entre ¼ e ½ → laranja) neste mês
+        self.assertEqual(este[0].cor, "n2")
+        legenda = aplicar_escala(este, conta)
+        self.assertEqual(legenda["reserva"], Decimal("1050"))
+        prox = extrato_mes(self.nova(), self.mes_queda.year, self.mes_queda.month)
+        legenda_prox = aplicar_escala(prox, self.nova())
+        self.assertEqual(legenda_prox["reserva"], Decimal("225"))
+        dia1 = prox[0]
+        self.assertEqual(dia1.cor, nivel_cor(dia1.esperado, Decimal("225"), Decimal("1500")))
+
+    def test_alerta_e_projecao_usam_a_reserva_do_mes(self):
+        r = self.client.get(reverse("financas:painel", args=[self.conta.pk]))
+        self.assertEqual(r.context["alerta"]["reserva"], Decimal("1050"))
+        self.assertEqual(r.context["legenda"]["reserva"], Decimal("1050"))
+        Cartao.objects.create(conta=self.conta, nome="Roxinho", dia_fechamento=25, dia_vencimento=5)
+        proj = self.client.get(reverse("financas:compra_nova", args=[self.conta.pk])).context["projecao"]
+        self.assertEqual(proj["reservas"][f"{self.mes_atual:%Y-%m}"], 105000)
+        self.assertEqual(proj["reservas"][f"{self.mes_queda:%Y-%m}"], 22500)
+        self.assertEqual(proj["salarios"][f"{self.mes_queda:%Y-%m}"], 150000)
+
+    def test_seletor_de_meses(self):
+        anos = meses_do_seletor(self.nova(), self.mes_atual.year, self.mes_queda.year, date.today())
+        meses = {m["data"]: m for a in anos for m in a["meses"]}
+        m = meses[self.mes_queda]
+        self.assertEqual(m["cor"], nivel_cor(m["fim"], Decimal("225"), Decimal("1500")))

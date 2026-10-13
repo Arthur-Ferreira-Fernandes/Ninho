@@ -137,6 +137,7 @@
 
       <div class="reserva-previa" aria-live="polite">
         <div class="reserva-valor">Reserva: <b id="reserva-valor">—</b></div>
+        <ul class="linha-do-tempo" id="reserva-tempo"></ul>
         <div class="faixas-exemplo">
           <span class="c-n4">negativo<small>&lt; R$ 0</small></span>
           <span class="c-n3">quase<small id="rf-quase">—</small></span>
@@ -321,6 +322,29 @@
     document.getElementById("rf-metade").textContent = reserva > 0 ? "< " + fmt(reserva / 2) : "—";
     document.getElementById("rf-reserva").textContent = reserva > 0 ? "< " + fmt(reserva) : "—";
     document.getElementById("rf-ok").textContent = reserva > 0 ? "≥ " + fmt(reserva) : "—";
+
+    // em "% do salário" (ou automática com dia a dia em %) a reserva acompanha o salário de cada mês
+    const tempo = document.getElementById("reserva-tempo");
+    tempo.replaceChildren();
+    const pctDia = modo() === "percentual" ? num(pct) : 0;
+    const reservaPara = (salarioMes) => r === "percentual" ? salarioMes * pctR / 100
+      : r === "auto" && pctDia ? salarioMes * pctDia / 100 * 10 / 30 : null;
+    if (reservaPara(0) !== null) {
+      let anterior = reserva;
+      linhaDoTempo().forEach((x) => {
+        const nova = reservaPara(x.valor);
+        if (Math.round(nova) === Math.round(anterior)) return;
+        const li = document.createElement("li");
+        const q = document.createElement("span");
+        q.textContent = "A partir de " + x.ref.toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+        const b = document.createElement("b"); b.textContent = fmt(nova);
+        const d = document.createElement("small");
+        d.className = nova > anterior ? "aumento" : "reducao";
+        d.textContent = "vermelho < " + fmt(nova / 4);
+        li.append(q, b, d); tempo.appendChild(li);
+        anterior = nova;
+      });
+    }
   }
 
   function atualizar() {

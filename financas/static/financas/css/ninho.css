@@ -1262,3 +1262,5 @@ details.encerrar > summary::-webkit-details-marker { display: none; }
 .barra-resultado i.neg { background: var(--neg); }
 .investido { color: var(--roxo-txt); }
 .resultado-mes small { color: var(--muted); }
+.linha-do-tempo li { grid-template-columns: 1fr auto auto; }
+.linha-do-tempo small { white-space: nowrap; }

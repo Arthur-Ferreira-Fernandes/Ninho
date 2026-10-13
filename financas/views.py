@@ -917,6 +917,16 @@ def assinatura_excluir(request, assinatura_pk):
     return _aba(conta, "contas")
 
 
+def _por_mes(inicio, fim, funcao):
+    resultado = {}
+    ano, mes = inicio.year, inicio.month
+    while (ano, mes) <= (fim.year, fim.month):
+        d = date(ano, mes, 1)
+        resultado[f"{ano}-{mes:02d}"] = funcao(d)
+        ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    return resultado
+
+
 MESES_PROJECAO = 24
 
 
@@ -950,6 +960,9 @@ def _projecao_sem_compra(conta, compra):
         "centavos": [int(v * 100) for v in valores],
         "salario": float(conta.salario),
         "reserva": float(conta.reserva),
+        # reserva e salário de cada mês da projeção ("AAAA-MM": centavos)
+        "reservas": _por_mes(inicio, fim, lambda d: int(conta.reserva_em(d) * 100)),
+        "salarios": _por_mes(inicio, fim, lambda d: int(conta.salario_em(d) * 100)),
         "meses": MESES_PROJECAO,
         "faturas": totais_faturas,
     }

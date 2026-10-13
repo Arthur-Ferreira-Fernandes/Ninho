@@ -397,11 +397,14 @@ def nivel_cor(valor, reserva, referencia):
     return f"p{min(NIVEIS, 1 + int((valor - reserva) / faixa))}"
 
 
-def referencia_cores(conta, valores):
-    """Referência dos verdes: o salário; sem salário, o maior saldo acima da reserva."""
-    if conta.salario > 0:
-        return conta.salario
-    return max((v - conta.reserva for v in valores), default=ZERO)
+def referencia_cores(conta, valores, data=None):
+    """Referência dos verdes: o salário do mês; sem salário, o maior saldo acima da reserva."""
+    data = data or date.today()
+    salario = conta.salario_em(data)
+    if salario > 0:
+        return salario
+    reserva = conta.reserva_em(data)
+    return max((v - reserva for v in valores), default=ZERO)
 
 
 def legenda_cores(reserva, referencia):
@@ -416,29 +419,39 @@ def legenda_cores(reserva, referencia):
 
 
 def aplicar_escala(dias, conta):
-    """Define dia.cor para cada dia ativo e devolve a legenda."""
+    """Define dia.cor para cada dia ativo e devolve a legenda (reserva e salário do mês exibido)."""
+    mes = dias[0].data
+    reserva = conta.reserva_em(mes)
     valores = [d.esperado for d in dias if d.ativo]
-    referencia = referencia_cores(conta, valores)
+    referencia = referencia_cores(conta, valores, mes)
     for d in dias:
-        d.cor = nivel_cor(d.esperado, conta.reserva, referencia) if d.ativo else ""
-    return legenda_cores(conta.reserva, referencia)
+        d.cor = nivel_cor(d.esperado, reserva, referencia) if d.ativo else ""
+    return legenda_cores(reserva, referencia)
 
 
 def alerta_saldo(conta, hoje, dias=60):
     """Primeiro dia abaixo da reserva e abaixo de zero nos próximos dias (ou None)."""
     inicio = max(hoje, conta.data_inicio)
     serie = serie_diaria(conta, inicio, inicio + timedelta(days=dias))
-    reserva = conta.reserva
-    abaixo = next((i for i, v in enumerate(serie) if v is not None and v < reserva), None)
+    # a reserva de cada dia é a do mês dele (acompanha o salário em "% do salário")
+    reservas = {}
+    def reserva_do(i):
+        d = inicio + timedelta(days=i)
+        chave = (d.year, d.month)
+        if chave not in reservas:
+            reservas[chave] = conta.reserva_em(d)
+        return reservas[chave]
+    abaixo = next((i for i, v in enumerate(serie) if v is not None and v < reserva_do(i)), None)
     if abaixo is None:
         return None
-    quase = next((i for i, v in enumerate(serie) if v is not None and v < reserva / 4), None)
+    reserva = reserva_do(abaixo)
+    quase = next((i for i, v in enumerate(serie) if v is not None and v < reserva_do(i) / 4), None)
     negativo = next((i for i, v in enumerate(serie) if v is not None and v < 0), None)
     pior = min(range(len(serie)), key=lambda i: serie[i])
     return {
         "reserva": reserva,
         "abaixo_em": inicio + timedelta(days=abaixo),
-        "quase": (reserva / 4).quantize(Decimal("1")),
+        "quase": ((reserva_do(quase) if quase is not None else reserva) / 4).quantize(Decimal("1")),
         "quase_em": inicio + timedelta(days=quase) if quase is not None else None,
         "ja_quase": quase == 0,
         "negativo_em": inicio + timedelta(days=negativo) if negativo is not None else None,
@@ -471,9 +484,10 @@ def meses_do_seletor(conta, ano_inicial, ano_final, hoje):
         anos.append({"ano": ano, "meses": meses})
 
     ativos = [m for a in anos for m in a["meses"] if m["ativo"]]
-    referencia = referencia_cores(conta, [m["fim"] for m in ativos])
+    valores = [m["fim"] for m in ativos]
     for m in ativos:
-        m["cor"] = nivel_cor(m["fim"], conta.reserva, referencia)
+        # cada mês com a reserva e o salário dele
+        m["cor"] = nivel_cor(m["fim"], conta.reserva_em(m["data"]), referencia_cores(conta, valores, m["data"]))
     return anos
 
 
