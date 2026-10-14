@@ -1892,3 +1892,54 @@ main:has(.analise-topo) { max-width: 1100px; }
   .carteira-meses td:nth-child(5)::before { content: "no banco: "; color: var(--muted); }
   .carteira-meses td:nth-child(5) small.bloco { display: inline; margin-left: 6px; }
 }
+
+/* faturas do cartão e milhas */
+.milhas-valor { color: var(--roxo-forte); font-variant-numeric: tabular-nums; }
+html[data-tema="escuro"] .milhas-valor { color: var(--serie-investido); }
+.fatura-topo h1 { font-size: 1.7rem; }
+.fatura-topo .rotulo { margin: 4px 0 0; }
+.fatura-aberta { background: var(--azul-bg); color: var(--azul-txt); }
+.fatura-fechada { background: var(--aviso-bg); color: var(--aviso-txt); }
+.fatura-paga { background: var(--sup-3); color: var(--muted); }
+.fatura-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.fatura-kpis { grid-template-columns: 1fr 1fr; margin-bottom: 16px; }
+.fatura-itens { list-style: none; margin: 0; padding: 0; }
+.fatura-itens li { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--borda); }
+.fatura-itens li:last-child { border-bottom: 0; }
+.fatura-itens .fi-data { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.fatura-itens .fi-nome { min-width: 0; }
+.fatura-itens .fi-nome a { color: var(--txt); font-weight: 600; text-decoration: none; }
+.fatura-itens .fi-nome a:hover { text-decoration: underline; }
+.fatura-itens .etiqueta, .fatura-itens .cat-chip { margin-left: 6px; }
+.fatura-itens b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fatura-itens.compacta li { padding: 6px 0; font-size: .85rem; }
+.fatura-itens .fi-total { font-weight: 700; border-bottom: 0; }
+.fatura-acoes { margin-bottom: 16px; }
+.fatura-proximas { margin: 0; position: sticky; top: 76px; }
+.fatura-proximas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.fatura-proximas a { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: var(--raio-sm); color: var(--txt); text-decoration: none; font-size: .88rem; }
+.fatura-proximas a:hover { background: var(--marca-50); }
+.fatura-proximas a[aria-current="page"] { background: var(--marca-100); color: var(--marca-txt); font-weight: 700; }
+.fatura-proximas b { font-variant-numeric: tabular-nums; }
+.fatura-resumo { margin-top: 10px; border: 1px solid var(--borda); border-radius: var(--raio-sm); padding: 0 12px; }
+.fatura-resumo summary { cursor: pointer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 10px 0; font-weight: 600; font-size: .88rem; }
+.fatura-resumo summary small { color: var(--muted); font-weight: 500; }
+.fatura-resumo[open] summary { border-bottom: 1px solid var(--borda); }
+.ver-faturas { display: inline-block; margin-top: 10px; font-size: .86rem; font-weight: 600; text-decoration: none; }
+.resumo-milhas { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--borda); }
+.resumo-milhas dd { color: var(--roxo-forte); font-weight: 700; }
+html[data-tema="escuro"] .resumo-milhas dd { color: var(--serie-investido); }
+.secao-milhas { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--borda); }
+.milhas-linha { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0 14px; align-items: start; }
+.rotulo-campo { display: block; font-weight: 600; font-size: .88rem; margin-bottom: 6px; }
+.escolha-moeda { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.escolha-moeda label { position: relative; display: grid; place-items: center; padding: 11px 8px; border: 1px solid var(--campo); border-radius: var(--raio-sm); cursor: pointer; font-weight: 600; font-size: .9rem; }
+.escolha-moeda input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.escolha-moeda label:has(input:checked) { border-color: var(--marca-600); background: var(--marca-50); color: var(--marca-txt); }
+.escolha-moeda label:has(input:focus-visible) { outline: 3px solid var(--ouro); outline-offset: 1px; }
+#bloco-cotacao[hidden] { display: none; }
+@media (max-width: 860px) {
+  .fatura-layout { grid-template-columns: minmax(0, 1fr); }
+  .fatura-proximas { position: static; }
+}
+@media (max-width: 520px) { .milhas-linha { grid-template-columns: 1fr; } .fatura-kpis { grid-template-columns: 1fr; } }

@@ -650,7 +650,30 @@
         <div><dt>Depois de pagar ({{ c.fechamento.vencimento|date:"d/m" }})</dt>
           <dd class="{% if c.fechamento.saldo_apos < 0 %}neg{% endif %}">{% if c.fechamento.saldo_apos is not None %}{{ c.fechamento.saldo_apos|brl }}{% else %}—{% endif %}</dd></div>
         {% if c.assinaturas_mes %}<div><dt>Assinaturas</dt><dd>{{ c.assinaturas_mes|brl }}/mês</dd></div>{% endif %}
+        {% if c.milhas_fechamento is not None %}<div><dt>Milhas da fatura que fecha {{ c.fechamento.data|date:"d/m" }}</dt><dd class="milhas-valor">≈ {{ c.milhas_fechamento|floatformat:"0g" }}</dd></div>{% endif %}
       </dl>
+      {% if c.proxima %}
+      <details class="fatura-resumo">
+        <summary>
+          <span>Compras da fatura que vence {{ c.proxima.vencimento|date:"d/m" }}</span>
+          <small>{{ c.proxima.quantidade }} ite{{ c.proxima.quantidade|pluralize:"m,ns" }}{% if c.milhas_proxima is not None %} · ≈ {{ c.milhas_proxima|floatformat:"0g" }} milhas{% endif %}</small>
+        </summary>
+        <ul class="fatura-itens compacta">
+          {% for p in c.proxima.parcelas %}
+          <li><span class="fi-data">{{ p.compra.data_compra|date:"d/m" }}</span>
+            <span class="fi-nome">{{ p.compra.descricao }}{% if p.compra.parcelas > 1 %} <small class="rotulo">{{ p.rotulo }}</small>{% endif %}</span>
+            <b>{{ p.valor|brl }}</b></li>
+          {% endfor %}
+          {% for co in c.proxima.cobrancas %}
+          <li><span class="fi-data">{{ co.data|date:"d/m" }}</span>
+            <span class="fi-nome">{{ co.assinatura.descricao }} <small class="rotulo">assinatura</small></span>
+            <b>{{ co.valor|brl }}</b></li>
+          {% endfor %}
+          <li class="fi-total"><span></span><span>Total</span><b>{{ c.proxima.total|brl }}</b></li>
+        </ul>
+      </details>
+      {% endif %}
+      <a class="ver-faturas" href="{% url 'financas:fatura' c.cartao.pk %}">Ver as faturas do {{ c.cartao.nome }} →</a>
       {% empty %}
       <p class="vazio">Nenhum cartão. <a href="{% url 'financas:cartao_novo' conta.pk %}">Cadastrar o primeiro</a></p>
       {% endfor %}

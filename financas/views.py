@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (_somar_meses, fatura_a_pagar, fatura_do_cartao, detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (CarteiraForm, ConferenciaInvestimentoForm, PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -325,9 +325,12 @@ def _cartoes_com_proxima_fatura(conta, hoje):
         fatura = next((f for f in do_cartao if f.fechamento == fechamento), None)
         calcula = fechamento >= conta.data_inicio
         assinaturas = [a for a in c.assinaturas.all() if a.ativa_em(hoje) or a.inicio > hoje]
+        proxima = do_cartao[0] if do_cartao else None
         resultado.append({
             "cartao": c,
-            "proxima": do_cartao[0] if do_cartao else None,
+            "proxima": proxima,
+            "milhas_proxima": c.milhas(proxima.total) if proxima else None,
+            "milhas_fechamento": c.milhas(fatura.total if fatura else Decimal("0")),
             "fechamento": {
                 "data": fechamento,
                 "vencimento": vencimento,
@@ -1015,6 +1018,43 @@ def cartao_form(request, pk=None, cartao_pk=None):
                   {"form": form, "conta": conta, "item": cartao if cartao.pk else None})
 
 
+@com_familia
+def fatura(request, cartao_pk):
+    """Compras e assinaturas de uma fatura do cartão (?ref=AAAA-MM, o mês do fechamento)."""
+    cartao = get_object_or_404(Cartao.objects.select_related("conta"), pk=cartao_pk, conta__familia=request.familia)
+    hoje = date.today()
+    try:
+        ano, mes = map(int, request.GET["ref"].split("-"))
+        date(ano, mes, 1)
+    except (KeyError, ValueError):
+        ano, mes = fatura_a_pagar(cartao, hoje)
+    f = fatura_do_cartao(cartao, ano, mes)
+    anterior = fatura_do_cartao(cartao, *_somar_meses(ano, mes, -1))
+    if f.vencimento < hoje:
+        situacao = "paga"
+    elif f.fechamento <= hoje:
+        situacao = "fechada"
+    else:
+        situacao = "aberta"
+    compras = sorted(f.parcelas, key=lambda p: (p.compra.data_compra, p.compra.pk))
+    # próximas faturas, para pular direto
+    proximas = []
+    a, m = fatura_a_pagar(cartao, hoje)
+    for _ in range(8):
+        x = fatura_do_cartao(cartao, a, m)
+        proximas.append({"ref": f"{a}-{m:02d}", "vencimento": x.vencimento, "total": x.total,
+                         "atual": (a, m) == (ano, mes)})
+        a, m = _somar_meses(a, m, 1)
+    return render(request, "financas/fatura.html", {
+        "conta": cartao.conta, "cartao": cartao, "fatura": f, "situacao": situacao, "hoje": hoje,
+        "compras": compras, "cobrancas": f.cobrancas,
+        "periodo_inicio": anterior.fechamento, "periodo_fim": f.fechamento - timedelta(days=1),
+        "milhas": cartao.milhas(f.total),
+        "ref_anterior": "%d-%02d" % _somar_meses(ano, mes, -1), "ref_seguinte": "%d-%02d" % _somar_meses(ano, mes, 1),
+        "proximas": proximas,
+    })
+
+
 @require_POST
 @com_familia
 def cartao_excluir(request, cartao_pk):
@@ -1049,7 +1089,11 @@ def compra_form(request, pk=None, compra_pk=None):
     return render(request, "financas/compra_form.html", {
         "form": form, "conta": conta, "cartoes": cartoes,
         "cartoes_dados": [{"id": c.pk, "nome": c.nome, "fechamento": c.dia_fechamento,
-                           "vencimento": c.dia_vencimento} for c in cartoes],
+                           "vencimento": c.dia_vencimento,
+                           # milhas: mesma conta de Cartao.milhas
+                           "milhas": float(c.milhas_taxa) if c.gera_milhas else 0,
+                           "por_dolar": c.milhas_moeda == Cartao.POR_DOLAR,
+                           "cotacao": float(c.cotacao_dolar or 0), "programa": c.programa} for c in cartoes],
         "inicio_calculo": conta.data_inicio.isoformat(),
         "projecao": _projecao_sem_compra(conta, compra),
         "item": compra if compra.pk else None,

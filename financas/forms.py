@@ -541,9 +541,35 @@ class CartaoForm(forms.ModelForm):
 
     class Meta:
         model = Cartao
-        fields = ["nome", "dia_fechamento", "dia_vencimento"]
-        labels = {"nome": "Nome do cartão"}
-        widgets = {"nome": forms.TextInput(attrs={"placeholder": "Ex.: Nubank, Itaú Visa", "autofocus": True})}
+        fields = ["nome", "dia_fechamento", "dia_vencimento", "milhas_taxa", "milhas_moeda", "cotacao_dolar", "programa"]
+        labels = {"nome": "Nome do cartão", "milhas_taxa": "Milhas ou pontos", "milhas_moeda": "A cada",
+                  "cotacao_dolar": "Cotação do dólar", "programa": "Programa"}
+        widgets = {
+            "nome": forms.TextInput(attrs={"placeholder": "Ex.: Nubank, Itaú Visa", "autofocus": True}),
+            "milhas_taxa": forms.NumberInput(attrs={"step": "0.01", "min": "0", "inputmode": "decimal", "placeholder": "Ex.: 2,2"}),
+            "milhas_moeda": forms.RadioSelect,
+            "cotacao_dolar": forms.NumberInput(attrs={"step": "0.0001", "min": "0", "inputmode": "decimal", "placeholder": "Ex.: 5,40"}),
+            "programa": forms.TextInput(attrs={"placeholder": "Ex.: Smiles, Livelo", "autocomplete": "off"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nome in ("milhas_taxa", "milhas_moeda", "cotacao_dolar", "programa"):
+            self.fields[nome].required = False
+            self.fields[nome].help_text = ""
+
+    def clean(self):
+        dados = super().clean()
+        if not dados.get("milhas_moeda"):
+            dados["milhas_moeda"] = Cartao.POR_DOLAR
+        taxa, moeda, cotacao = dados.get("milhas_taxa"), dados.get("milhas_moeda"), dados.get("cotacao_dolar")
+        if taxa is not None and taxa < 0:
+            self.add_error("milhas_taxa", "Use um número positivo.")
+        if taxa and moeda == Cartao.POR_DOLAR and not cotacao:
+            self.add_error("cotacao_dolar", "Informe a cotação do dólar para converter a fatura.")
+        if cotacao is not None and cotacao <= 0:
+            self.add_error("cotacao_dolar", "A cotação precisa ser maior que zero.")
+        return dados
 
 
 class CompraCartaoForm(ComCategoria, forms.ModelForm):

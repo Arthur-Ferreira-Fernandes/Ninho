@@ -432,6 +432,17 @@ class Cartao(models.Model):
         help_text="Compras a partir deste dia vão para a fatura do mês seguinte.")
     dia_vencimento = models.PositiveSmallIntegerField(help_text="Dia em que a fatura é paga.")
 
+    # Milhas/pontos: quantos a fatura gera por real ou por dólar gasto (opcional)
+    POR_REAL = "real"
+    POR_DOLAR = "dolar"
+    MOEDAS_MILHAS = [(POR_DOLAR, "por US$ 1"), (POR_REAL, "por R$ 1")]
+    milhas_taxa = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+                                      help_text="Quantas milhas ou pontos a cada 1 real ou 1 dólar gasto.")
+    milhas_moeda = models.CharField(max_length=5, choices=MOEDAS_MILHAS, default=POR_DOLAR)
+    cotacao_dolar = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True,
+                                        help_text="Quantos reais vale 1 dólar na conversão (para pontos por dólar).")
+    programa = models.CharField(max_length=40, blank=True, help_text="Ex.: Smiles, Livelo, LATAM Pass.")
+
     class Meta:
         ordering = ["nome"]
         verbose_name = "cartão"
@@ -439,6 +450,21 @@ class Cartao(models.Model):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def gera_milhas(self):
+        return bool(self.milhas_taxa) and (self.milhas_moeda == self.POR_REAL or bool(self.cotacao_dolar))
+
+    def milhas(self, valor_reais):
+        """Milhas estimadas para um valor em reais (arredondadas para baixo), ou None sem configuração."""
+        if not self.gera_milhas or valor_reais is None:
+            return None
+        base = valor_reais if self.milhas_moeda == self.POR_REAL else valor_reais / self.cotacao_dolar
+        return max(0, int(base * self.milhas_taxa))
+
+    @property
+    def nome_pontos(self):
+        return f"milhas {self.programa}" if self.programa else "milhas"
 
 
 class CompraCartao(models.Model):

@@ -16,6 +16,27 @@
     </div>
     <p class="ajuda">Os dois aparecem na fatura ou no app do banco. Em meses mais curtos, dias 29 a 31 viram o último dia do mês.</p>
 
+    <fieldset class="secao secao-milhas">
+      <legend>Milhas e pontos <span class="opcional">(opcional)</span></legend>
+      <p class="ajuda-secao">Quantas milhas a fatura gera: está no regulamento do cartão (ex.: “2,2 pontos por dólar”). O {{ marca.nome }} estima as milhas de cada fatura e de cada compra.</p>
+      <div class="milhas-linha">
+        {% with field=form.milhas_taxa %}{% include "financas/_campo.html" %}{% endwith %}
+        <div class="campo">
+          <span class="rotulo-campo">{{ form.milhas_moeda.label }}</span>
+          <div class="escolha-moeda" role="radiogroup" aria-label="Milhas por real ou por dólar">
+            {% for radio in form.milhas_moeda %}<label>{{ radio.tag }}<span>{{ radio.choice_label }}</span></label>{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="campos-2">
+        <div id="bloco-cotacao">
+          {% with field=form.cotacao_dolar %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+          <p class="ajuda">Use a cotação que o banco aplica na fatura (perto do dólar do dia). Atualize quando mudar bastante.</p>
+        </div>
+        {% with field=form.programa %}{% include "financas/_campo.html" %}{% endwith %}
+      </div>
+    </fieldset>
+
     <div class="acoes-form linha-botoes">
       <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar cartão{% endif %}</button>
       <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#cartoes">Cancelar</a>
@@ -31,6 +52,7 @@
       </div>
       <dl class="resumo-lista">
         <div><dt>Melhor dia de compra</dt><dd id="c-melhor">—</dd></div>
+        <div><dt>Uma fatura de R$ 1.000 gera</dt><dd id="c-milhas">—</dd></div>
       </dl>
       <p class="resumo-nota" id="c-exemplo">Preencha o fechamento e o vencimento.</p>
     </div>
@@ -54,7 +76,20 @@
     return venc > fech ? diaNoMes(ano, mes, venc) : diaNoMes(ano, mes + 1, venc);
   }
 
+  // milhas: mesma conta de Cartao.milhas (financas/models.py)
+  const num = (n) => parseFloat(String($(n).value).replace(",", ".")) || 0;
+  function milhas() {
+    const porDolar = (form.querySelector("[name=milhas_moeda]:checked") || {}).value === "dolar";
+    document.getElementById("bloco-cotacao").hidden = !porDolar;
+    const taxa = num("milhas_taxa"), cot = num("cotacao_dolar");
+    const base = porDolar ? (cot ? 1000 / cot : 0) : 1000;
+    const programa = $("programa").value.trim();
+    document.getElementById("c-milhas").textContent = taxa && base
+      ? Math.floor(base * taxa).toLocaleString("pt-BR") + " milhas" + (programa ? " " + programa : "") : "—";
+  }
+
   function atualizar() {
+    milhas();
     const fech = +$("dia_fechamento").value, venc = +$("dia_vencimento").value;
     document.getElementById("c-nome").textContent = $("nome").value.trim() || "Novo cartão";
     const ok = fech >= 1 && fech <= 31 && venc >= 1 && venc <= 31;
@@ -69,6 +104,7 @@
       ". A partir do dia " + fech + ", na que vence em " + fmt(v2) + ".";
   }
   form.addEventListener("input", atualizar);
+  form.addEventListener("change", atualizar);
   atualizar();
 })();
 </script>

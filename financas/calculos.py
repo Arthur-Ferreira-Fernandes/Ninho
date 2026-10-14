@@ -651,14 +651,14 @@ def faturas(conta, inicio, fim, sem_compra=None):
             por_chave[chave] = Fatura(cartao, fechamento.year, fechamento.month, fechamento, vencimento)
         return por_chave[chave]
 
-    compras = CompraCartao.objects.filter(cartao__conta=conta).select_related("cartao")
+    compras = CompraCartao.objects.filter(cartao__conta=conta).select_related("cartao", "categoria")
     if sem_compra:
         compras = compras.exclude(pk=sem_compra)
     for compra in compras:
         for p in cronograma(compra):
             if inicio <= p.vencimento <= fim:
                 fatura_de(compra.cartao, p.fechamento, p.vencimento).parcelas.append(p)
-    for assinatura in AssinaturaCartao.objects.filter(cartao__conta=conta).select_related("cartao"):
+    for assinatura in AssinaturaCartao.objects.filter(cartao__conta=conta).select_related("cartao", "categoria"):
         for c in cobrancas(assinatura, inicio, fim):
             fatura_de(assinatura.cartao, c.fechamento, c.vencimento).cobrancas.append(c)
 
@@ -962,3 +962,21 @@ def fluxo_diario(dias, hoje):
             "itens": itens,
         })
     return serie
+
+
+def fatura_do_cartao(cartao, ano, mes):
+    """A fatura do cartão que fecha no mês ano/mês, com as parcelas e as assinaturas (vazia se não houver)."""
+    fechamento, vencimento = datas_da_fatura(cartao, ano, mes)
+    for f in faturas(cartao.conta, vencimento, vencimento):
+        if f.cartao.pk == cartao.pk and f.fechamento == fechamento:
+            return f
+    return Fatura(cartao, ano, mes, fechamento, vencimento)
+
+
+def fatura_a_pagar(cartao, hoje):
+    """(ano, mês) de fechamento da próxima fatura que ainda vai ser paga (vence hoje ou depois)."""
+    ano, mes = _somar_meses(hoje.year, hoje.month, -2)
+    while True:
+        if datas_da_fatura(cartao, ano, mes)[1] >= hoje:
+            return ano, mes
+        ano, mes = _somar_meses(ano, mes, 1)

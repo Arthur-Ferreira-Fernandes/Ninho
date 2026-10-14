@@ -63,6 +63,11 @@
       </div>
       <div class="resumo-valor" id="r-valor">R$ 0,00</div>
       <p class="resumo-parcela" id="r-parcela"></p>
+      <dl class="resumo-lista resumo-milhas" id="r-milhas" hidden>
+        <div><dt>Esta compra gera</dt><dd id="r-milhas-compra">—</dd></div>
+        <div><dt id="r-milhas-fatura-rotulo">Fatura em que ela entra</dt><dd id="r-milhas-fatura">—</dd></div>
+      </dl>
+      <p class="resumo-nota" id="r-milhas-nota" hidden></p>
     </div>
 
     <div class="card impacto" id="impacto" aria-live="polite">
@@ -375,6 +380,32 @@
   el("mi-ant").addEventListener("click", () => { if (mesAtual > 0) { mesAtual--; mesEscolhido = true; diaFoco = null; desenharMes(); } });
   el("mi-prox").addEventListener("click", () => { if (mesAtual < MESES.length - 1) { mesAtual++; mesEscolhido = true; diaFoco = null; desenharMes(); } });
 
+  // ---------- milhas (mesma conta de Cartao.milhas em financas/models.py) ----------
+  const milhasDe = (c, centavos) => Math.max(0, Math.floor((c.por_dolar ? centavos / 100 / c.cotacao : centavos / 100) * c.milhas));
+  const fmtMilhas = (c, m) => m.toLocaleString("pt-BR") + " milhas" + (c.programa ? " " + c.programa : "");
+  function mostrarMilhas(cartao, total, parcelas) {
+    const caixa = el("r-milhas"), nota = el("r-milhas-nota");
+    const gera = cartao && cartao.milhas > 0;
+    caixa.hidden = !gera || !total;
+    nota.hidden = !!(gera || !cartao);
+    if (cartao && !gera) {
+      nota.replaceChildren("O " + cartao.nome + " não tem milhas configuradas. ");
+      const a = document.createElement("a");
+      a.href = "{% url 'financas:cartao_editar' 0 %}".replace("/0/", "/" + cartao.id + "/");
+      a.textContent = "Informar quantas milhas gera";
+      nota.appendChild(a);
+    }
+    if (!gera || !total) return;
+    el("r-milhas-compra").textContent = "≈ " + fmtMilhas(cartao, milhasDe(cartao, total));
+    if (!parcelas) { el("r-milhas-fatura").textContent = "—"; return; }
+    // fatura da 1ª parcela: o que já está previsto nela + esta parcela
+    const p1 = parcelas[0], f = p1.fechamento;
+    const chave = f.getFullYear() + "-" + String(f.getMonth() + 1).padStart(2, "0") + "-" + String(f.getDate()).padStart(2, "0");
+    const base = ((PROJ.faturas[String(cartao.id)] || {})[chave]) || 0;
+    el("r-milhas-fatura-rotulo").textContent = "Fatura que vence " + fmtCurta(p1.vencimento);
+    el("r-milhas-fatura").textContent = "≈ " + fmtMilhas(cartao, milhasDe(cartao, base + p1.valor)) + " (" + reais(base + p1.valor) + ")";
+  }
+
   // ---------- atualização ----------
   function atualizar() {
     const { cartao, total, n, vals, parcelas } = parcelasDoFormulario();
@@ -388,6 +419,8 @@
     el("r-valor").textContent = "− " + reais(total);
     el("r-parcela").textContent = !total ? "" : n === 1 ? "À vista" :
       n + "x de " + reais(valores(total, n)[n - 1]) + (valores(total, n)[0] !== valores(total, n)[n - 1] ? " (1ª de " + reais(valores(total, n)[0]) + ")" : "");
+
+    mostrarMilhas(cartao, total, parcelas);
 
     const tem = !!parcelas;
     el("i-vazio").hidden = tem;

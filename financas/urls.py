@@ -49,6 +49,7 @@ urlpatterns = [
     path("contas/<int:pk>/cartoes/novo/", views.cartao_form, name="cartao_novo"),
     path("cartoes/<int:cartao_pk>/editar/", views.cartao_form, name="cartao_editar"),
     path("cartoes/<int:cartao_pk>/excluir/", views.cartao_excluir, name="cartao_excluir"),
+    path("cartoes/<int:cartao_pk>/fatura/", views.fatura, name="fatura"),
     path("contas/<int:pk>/compras/nova/", views.compra_form, name="compra_nova"),
     path("compras/<int:compra_pk>/editar/", views.compra_form, name="compra_editar"),
     path("compras/<int:compra_pk>/excluir/", views.compra_excluir, name="compra_excluir"),

@@ -1,0 +1,79 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}Fatura {{ cartao.nome }} · {{ fatura.vencimento|date:"m/Y" }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}#cartoes">← Cartões e lançamentos</a>
+
+<div class="mes-topo fatura-topo">
+  <div>
+    <span class="mes-sobretitulo">Fatura do {{ cartao.nome }}</span>
+    <h1>Vence em {{ fatura.vencimento|date:"d \d\e F"|lower }}</h1>
+    <p class="rotulo">Compras de {{ periodo_inicio|date:"d/m" }} a {{ periodo_fim|date:"d/m/Y" }} · fecha em {{ fatura.fechamento|date:"d/m" }}
+      <span class="etiqueta fatura-{{ situacao }}">{% if situacao == "aberta" %}aberta{% elif situacao == "fechada" %}fechada, a pagar{% else %}paga{% endif %}</span></p>
+  </div>
+  <nav class="mes-nav" aria-label="Escolher a fatura">
+    <a class="btn fantasma" href="?ref={{ ref_anterior }}" aria-label="Fatura anterior" title="Fatura anterior">‹</a>
+    <a class="btn fantasma" href="?ref={{ ref_seguinte }}" aria-label="Próxima fatura" title="Próxima fatura">›</a>
+  </nav>
+</div>
+
+<div class="fatura-layout">
+  <div>
+    <div class="kpis fatura-kpis">
+      <div class="card kpi"><span>Total da fatura</span><b class="neg">{{ fatura.total|brl }}</b>
+        <small>{{ fatura.quantidade }} ite{{ fatura.quantidade|pluralize:"m,ns" }}{% if situacao == "aberta" %} até agora{% endif %}</small></div>
+      <div class="card kpi"><span>Milhas estimadas</span>
+        {% if milhas is not None %}<b class="milhas-valor">{{ milhas|floatformat:"0g" }}</b>
+        <small>{{ cartao.milhas_taxa|floatformat:"-2" }} {% if cartao.milhas_moeda == "dolar" %}por US$ 1 (dólar a R$ {{ cartao.cotacao_dolar|floatformat:"-2" }}){% else %}por R$ 1{% endif %}{% if cartao.programa %} · {{ cartao.programa }}{% endif %}</small>
+        {% else %}<b>—</b><small><a href="{% url 'financas:cartao_editar' cartao.pk %}">informe quantas milhas o cartão gera</a></small>{% endif %}</div>
+    </div>
+
+    <div class="card">
+      <div class="dm-grupo-cabeca"><h2>Compras</h2><b>{{ compras|length }}</b></div>
+      {% if compras %}
+      <ul class="fatura-itens">
+        {% for p in compras %}
+        <li>
+          <span class="fi-data">{{ p.compra.data_compra|date:"d/m" }}</span>
+          <span class="fi-nome"><a href="{% url 'financas:compra_editar' p.compra.pk %}">{{ p.compra.descricao }}</a>
+            {% if p.compra.parcelas > 1 %}<span class="etiqueta etiqueta-cartao">parcela {{ p.rotulo }}</span>{% endif %}
+            {% if p.compra.categoria %}<small class="cat-chip">{{ p.compra.categoria.nome }}</small>{% endif %}
+            {% if p.compra.parcelas > 1 %}<small class="rotulo bloco">total da compra {{ p.compra.valor_total|brl }}{% if p.compra.data_compra < periodo_inicio %} · comprada em {{ p.compra.data_compra|date:"d/m/Y" }}{% endif %}</small>{% endif %}</span>
+          <b>{{ p.valor|brl }}</b>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="vazio-texto">Nenhuma compra nesta fatura.</p>{% endif %}
+    </div>
+
+    {% if cobrancas %}
+    <div class="card">
+      <div class="dm-grupo-cabeca"><h2>Assinaturas</h2><b>{{ cobrancas|length }}</b></div>
+      <ul class="fatura-itens">
+        {% for c in cobrancas %}
+        <li>
+          <span class="fi-data">{{ c.data|date:"d/m" }}</span>
+          <span class="fi-nome"><a href="{% url 'financas:assinatura_editar' c.assinatura.pk %}">{{ c.assinatura.descricao }}</a>
+            {% if c.assinatura.categoria %}<small class="cat-chip">{{ c.assinatura.categoria.nome }}</small>{% endif %}</span>
+          <b>{{ c.valor|brl }}</b>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <div class="fatura-acoes">
+      <a class="btn" href="{% url 'financas:compra_nova' conta.pk %}?cartao={{ cartao.pk }}">+ Compra neste cartão</a>
+    </div>
+  </div>
+
+  <aside class="card fatura-proximas">
+    <h2>Próximas faturas</h2>
+    <ul>
+      {% for x in proximas %}
+      <li><a href="?ref={{ x.ref }}"{% if x.atual %} aria-current="page"{% endif %}>
+        <span>vence {{ x.vencimento|date:"d/m/y" }}</span><b>{{ x.total|brl }}</b></a></li>
+      {% endfor %}
+    </ul>
+    <p class="rotulo nota-lista">Inclui as parcelas que ainda vão vencer e as assinaturas ativas.</p>
+  </aside>
+</div>
+{% endblock %}
