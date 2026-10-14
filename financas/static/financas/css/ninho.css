@@ -649,7 +649,7 @@ tr.inativa td { opacity: .5; }
 .dia-fixa { width: 1%; }
 .dia-fixa, .data-curta { white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.vencimentos { list-style: none; margin: 0; padding: 0; display: grid; }
+.vencimentos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .vencimentos li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--sup-3); }
 .vencimentos li:last-child { border-bottom: 0; }
 .data-badge {
@@ -1700,3 +1700,134 @@ main:has(.analise-topo) { max-width: 1100px; }
   word-break: break-all; font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 .endereco-copiar .btn { padding: 5px 10px; font-size: .8rem; }
+
+/* ==========================================================================
+   Celular: barra de navegação embaixo, topo enxuto e listas que cabem na tela
+   ========================================================================== */
+.instalar-app svg { width: 18px; height: 18px; }
+.sair-perfil { width: 100%; margin-top: 14px; }
+.nav-inferior, .sair-perfil { display: none; }
+
+/* atualização automática (tempo-real.js) */
+.aviso-tempo-real {
+  position: fixed; z-index: 60; left: 0; right: 0; bottom: 24px; margin: 0 auto;
+  width: max-content; max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 16px; border-radius: 99px; border: 1px solid var(--borda);
+  background: var(--card); color: var(--txt); box-shadow: 0 10px 30px rgba(0, 0, 0, .3); font-size: .88rem;
+  animation: aviso-entra .2s ease-out;
+}
+.aviso-tempo-real .btn { padding: 6px 14px; border-radius: 99px; }
+.aviso-tempo-real.discreto { padding: 8px 16px; color: var(--muted); }
+.aviso-tempo-real.saindo { opacity: 0; transition: opacity .5s; }
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .aviso-tempo-real { animation: none; } }
+
+@media (max-width: 760px) {
+  /* barra fixa embaixo; o conteúdo ganha espaço para não ficar por trás dela */
+  body.com-nav-inferior main { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  body.com-nav-inferior .aviso-tempo-real { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .nav-inferior {
+    position: fixed; z-index: 40; left: 0; right: 0; bottom: 0;
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: end;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--card) 92%, transparent); border-top: 1px solid var(--borda);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  .nav-inferior a {
+    display: grid; justify-items: center; gap: 2px; padding: 6px 0 4px; border-radius: 10px;
+    color: var(--muted); text-decoration: none; font-size: .7rem; font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-inferior svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-inferior svg .cheio { fill: currentColor; stroke: none; }
+  .nav-inferior a[aria-current="page"] { color: var(--marca-txt); }
+  .nav-inferior a[aria-current="page"] svg { stroke-width: 2.2; }
+  .nav-adicionar {
+    justify-self: center; width: 52px; height: 52px; margin-bottom: 4px; border: 0; border-radius: 16px;
+    display: grid; place-items: center; background: var(--marca-700); color: #fff; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(15, 94, 85, .45); -webkit-tap-highlight-color: transparent;
+  }
+  .nav-adicionar:active { transform: scale(.96); }
+  .nav-adicionar svg { width: 26px; height: 26px; stroke-width: 2.4; }
+
+  /* o que os botões do topo do painel faziam agora está no "+" */
+  body.com-nav-inferior .painel-topo > .painel-acoes { display: none; }
+  .sair-topo { display: none; }
+  .sair-perfil { display: block; }
+}
+
+/* folha de ações do "+" (sobe de baixo no celular) */
+.folha { width: min(560px, calc(100vw - 32px)); }
+.folha h2 { margin-bottom: 14px; }
+.acoes-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.acoes-grade a {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px;
+  align-items: center; padding: 12px; border: 1px solid var(--borda); border-radius: var(--raio-sm);
+  color: var(--txt); text-decoration: none; background: var(--sup-2);
+}
+.acoes-grade a:hover, .acoes-grade a:focus-visible { border-color: var(--marca-600); background: var(--marca-50); }
+.acoes-grade .acao-icone {
+  grid-row: 1 / span 2; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--marca-100); color: var(--marca-txt); font-size: 1.05rem;
+}
+.acoes-grade b { font-size: .9rem; }
+.acoes-grade small { color: var(--muted); font-size: .75rem; line-height: 1.3; }
+.acoes-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borda); }
+.acoes-links a { font-size: .82rem; font-weight: 600; text-decoration: none; padding: 6px 12px; border-radius: 99px; background: var(--sup-3); color: var(--txt); }
+@media (max-width: 760px) {
+  .folha {
+    width: 100vw; max-width: none; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 88vh; overflow-y: auto;
+  }
+  .folha[open] { animation: folha-sobe .22s ease-out; }
+  @keyframes folha-sobe { from { transform: translateY(40px); opacity: .4; } }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) { .folha[open] { animation: none; } }
+
+@media (max-width: 640px) {
+  main { padding: 14px 12px; }
+
+  /* topo: logo, instalar (só o ícone), tema e perfil; a família fica em Meus dados */
+  .app-topo { padding-left: 12px; padding-right: 12px; gap: 8px; }
+  .app-topo .tenant { display: none; }
+  .app-usuario { gap: 6px; min-width: 0; }
+  .instalar-app { padding: 8px; }
+  .instalar-app .rotulo-largo { display: none; }
+
+  /* campos com menos de 16px fazem o iPhone dar zoom ao tocar */
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px !important; }
+
+  /* painel */
+  .painel-topo { margin-bottom: 12px; }
+  .painel-topo h1 { font-size: 1.45rem; }
+  .destaques.compactos { gap: 6px; margin-bottom: 12px; }
+  .destaques.compactos .destaque { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; padding: 9px 12px; }
+  .destaques.compactos .destaque p { display: none; }
+  .destaques.compactos .destaque strong { font-size: .84rem; line-height: 1.3; }
+  .destaques.compactos .destaque-icone { width: 24px; height: 24px; font-size: .75rem; }
+  .destaques.compactos .destaque-link { grid-column: 3; font-size: .8rem; }
+  .kpi strong { font-size: 1.2rem; }
+
+  /* listas da aba Contas e dos lançamentos viram cartões: dia, descrição e valor; ações embaixo */
+  .lista-moveis thead { display: none; }
+  .lista-moveis, .lista-moveis tbody { display: block; width: 100%; }
+  .lista-moveis tr {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 4px 10px;
+    padding: 10px 8px; border-bottom: 1px solid var(--borda); border-radius: var(--raio-sm);
+  }
+  .lista-moveis td { display: block; padding: 0 !important; border: 0 !important; background: none !important; min-width: 0; }
+  .lista-moveis td.col-acoes { grid-column: 2 / -1; width: auto; white-space: normal; }
+  .lista-moveis td.vazio { grid-column: 1 / -1; }
+  .lista-moveis .acoes-linha { justify-content: flex-start; flex-wrap: wrap; margin-left: -10px; }
+  .lista-moveis tr.linha-dia-a-dia { background: var(--marca-50); }
+  .lista-moveis tr.linha-guardar { background: var(--roxo-bg); }
+  .lista-moveis .por-mes { display: block; }
+
+  /* grades que viravam duas colunas espremidas */
+  .contas-layout, .cartoes-layout, .contas-layout.cartoes-layout { grid-template-columns: minmax(0, 1fr); }
+
+  /* formulários: o resumo vem depois dos campos (antes empurrava o formulário para baixo) */
+  .fixa-resumo { order: 0; }
+  .card { padding: 16px; }
+}

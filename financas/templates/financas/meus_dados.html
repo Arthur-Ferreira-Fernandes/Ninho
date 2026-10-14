@@ -58,6 +58,9 @@
         {% endif %}
         <div><dt>Membro desde</dt><dd>{{ user.date_joined|date:"d/m/Y" }}</dd></div>
       </dl>
+      <form method="post" action="{% url 'financas:sair' %}" class="sair-perfil">{% csrf_token %}
+        <button class="btn sec bloco" type="submit">Sair</button>
+      </form>
     </div>
     <div class="card app-card">
       <h2 style="margin:0;font-size:1rem">Usar como app</h2>

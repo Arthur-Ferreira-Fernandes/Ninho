@@ -1,5 +1,7 @@
 {% load static %}<meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {% if versao_dados is not None %}<meta name="ninho-versao" content="{{ versao_dados }}">
+  <script src="{% static 'financas/js/tempo-real.js' %}" defer></script>{% endif %}
   <meta name="theme-color" content="{% if tema == 'claro' %}#0f5e55{% else %}#0e1413{% endif %}">
   <link rel="icon" type="image/svg+xml" href="{% static 'financas/img/favicon.svg' %}">
   <link rel="manifest" href="{% url 'financas:manifest' %}">

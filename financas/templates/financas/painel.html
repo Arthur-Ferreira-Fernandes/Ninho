@@ -496,7 +496,7 @@
           <small class="rotulo">fixas {{ totais_fixas.despesas|brl }}{% if totais_fixas.assinaturas %} (com assinaturas){% endif %} + dia a dia {{ totais_fixas.dia_a_dia|brl }}{% if totais_fixas.guardar %} + guardar {{ totais_fixas.guardar|brl }}{% endif %}</small></div>
         <div><span class="rotulo">Sobra/mês</span><b class="{% if totais_fixas.sobra < 0 %}neg{% endif %}">{{ totais_fixas.sobra|brl }}</b></div>
       </div>
-      <table class="lista">
+      <table class="lista lista-moveis">
         <thead><tr><th>Dia</th><th>Descrição</th><th class="num">Valor</th><th class="col-acoes"><span class="sr">Ações</span></th></tr></thead>
         <tbody>
         {% if dia_a_dia %}
@@ -710,7 +710,7 @@
   <div class="card">
     <div class="topo"><h2 style="margin:0">Lançamentos avulsos</h2><a class="btn sec" href="{% url 'financas:lancamento_novo' conta.pk %}">+ Adicionar</a></div>
     <p class="rotulo" style="margin-top:0">Entradas e saídas fora do dia a dia e das contas fixas (ex.: um freela, uma compra grande).</p>
-    <table class="lista">
+    <table class="lista lista-moveis">
       {% for l in lancamentos %}
       <tr><td class="data-curta"><a href="?mes={{ l.data|date:'Y-m' }}&dia={{ l.data|date:'Y-m-d' }}#extrato">{{ l.data|date:"d/m/Y" }}</a></td>
         <td><a href="{% url 'financas:item_editar' 'lancamento' l.pk %}?voltar=cartoes">{{ l.descricao }}</a></td>
@@ -895,6 +895,7 @@
       </div>
       <a class="btn" href="?dia={{ hoje|date:'Y-m-d' }}#extrato">Conferir hoje</a>
     </div>
+    <div class="tabela-rolagem-x">
     <table class="lista">
       <thead><tr><th>Data</th><th class="num">Esperado</th><th class="num">Real</th><th class="num">Diferença</th><th></th></tr></thead>
       <tbody>
@@ -919,6 +920,7 @@
       {% empty %}<tr><td colspan="5" class="vazio">Nenhuma conferência ainda. Abra um dia no extrato e informe quanto o banco mostrava.</td></tr>{% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 
@@ -1002,8 +1004,15 @@
         abrir(prox.getAttribute("aria-controls"), true);
       });
     });
+    // "Gasto de hoje" (botão + do celular): aba do dia com o cursor no campo do gasto
+    function focarGasto() {
+      if (location.hash !== "#gasto") return;
+      const campo = document.querySelector(".gasto-form input[name=descricao]");
+      if (campo) { campo.scrollIntoView({ block: "center" }); campo.focus({ preventScroll: true }); }
+    }
     abrir(location.hash.slice(1));
-    window.addEventListener("hashchange", () => abrir(location.hash.slice(1)));
+    focarGasto();
+    window.addEventListener("hashchange", () => { abrir(location.hash.slice(1)); focarGasto(); });
   })();
 
   // escolher o dia pelo calendário do navegador

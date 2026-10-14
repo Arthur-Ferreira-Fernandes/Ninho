@@ -77,6 +77,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'financas.tempo_real.VersaoMiddleware',
 ]
 
 if not DEBUG:
@@ -97,6 +98,8 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'financas.context_processors.marca',
                 'financas.context_processors.tema',
+                'financas.tempo_real.contexto',
+                'financas.context_processors.navegacao',
             ],
         },
     },

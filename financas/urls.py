@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import pwa, views, views_analise
+from . import pwa, tempo_real, views, views_analise
 from .forms import LoginForm
 
 app_name = "financas"
@@ -9,6 +9,7 @@ app_name = "financas"
 urlpatterns = [
     path("", views.inicio, name="inicio"),
     path("saude/", pwa.saude, name="saude"),
+    path("versao/", tempo_real.versao, name="versao"),
     path("manifest.webmanifest", pwa.manifest, name="manifest"),
     path("sw.js", pwa.service_worker, name="service_worker"),
     path("offline/", pwa.offline, name="offline"),

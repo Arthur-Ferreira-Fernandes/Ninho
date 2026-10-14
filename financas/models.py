@@ -23,6 +23,8 @@ class Familia(models.Model):
     criada_em = models.DateTimeField(auto_now_add=True)
     # as categorias padrão são criadas uma vez; depois a família pode apagar as que não quiser
     categorias_iniciadas = models.BooleanField(default=False)
+    # muda a cada alteração feita pela família: as telas abertas comparam para se atualizar sozinhas
+    versao = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         verbose_name = "família"

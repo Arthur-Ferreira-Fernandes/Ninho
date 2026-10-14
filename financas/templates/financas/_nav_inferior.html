@@ -1,0 +1,64 @@
+{# Navegação do celular: barra fixa embaixo, com o "+" para lançar qualquer coisa #}
+<nav class="nav-inferior" aria-label="Navegação principal">
+  <a href="{% url 'financas:painel' c.pk %}#extrato" data-nav="extrato">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/><circle cx="12" cy="15" r="1.6" class="cheio"/></svg>
+    <span>Hoje</span>
+  </a>
+  <a href="{% url 'financas:painel' c.pk %}#mensal" data-nav="mensal">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V11M10 19V6M15 19v-5M20 19V9"/></svg>
+    <span>Mês</span>
+  </a>
+  <button type="button" class="nav-adicionar" aria-label="Lançar ou adicionar" aria-haspopup="dialog"
+          onclick="document.getElementById('acoes-rapidas').showModal()">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <a href="{% url 'financas:analise' c.pk %}" data-nav="analise">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-6 4 3 7-9"/><path d="M15 6h5v5"/></svg>
+    <span>Análise</span>
+  </a>
+  <a href="{% url 'financas:painel' c.pk %}#investimentos" data-nav="investimentos">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11a7 6 0 0 1 13-2h1.5v4H18a7 6 0 0 1-3 3.5V19h-3v-2H9v2H6v-3.2A6 6 0 0 1 5 11Z"/><path d="M10 6.2a3 3 0 0 1 5 0"/></svg>
+    <span>Guardar</span>
+  </a>
+</nav>
+
+<dialog class="dialogo folha" id="acoes-rapidas" aria-labelledby="acoes-rapidas-titulo">
+  <form method="dialog" class="dialogo-fechar"><button type="submit" class="btn fantasma" aria-label="Fechar">×</button></form>
+  <h2 id="acoes-rapidas-titulo">O que você quer lançar?</h2>
+  <div class="acoes-grade">
+    <a href="{% url 'financas:painel' c.pk %}?dia={% now 'Y-m-d' %}#gasto"><span class="acao-icone">☕</span><b>Gasto de hoje</b><small>do dinheiro do dia a dia</small></a>
+    <a href="{% url 'financas:lancamento_novo' c.pk %}"><span class="acao-icone">⇅</span><b>Lançamento</b><small>entrada ou saída avulsa</small></a>
+    <a href="{% url 'financas:compra_nova' c.pk %}"><span class="acao-icone">▭</span><b>Compra no cartão</b><small>à vista ou parcelada</small></a>
+    <a href="{% url 'financas:fixa_nova' c.pk %}"><span class="acao-icone">↻</span><b>Conta fixa</b><small>todo mês ou a cada X dias</small></a>
+    <a href="{% url 'financas:painel' c.pk %}#investimentos"><span class="acao-icone">★</span><b>Guardar dinheiro</b><small>do mês ou avulso</small></a>
+    <a href="{% url 'financas:importar' c.pk %}"><span class="acao-icone">⇪</span><b>Importar extrato</b><small>OFX ou CSV do banco</small></a>
+  </div>
+  <div class="acoes-links">
+    <a href="{% url 'financas:painel' c.pk %}#contas">Contas e vencimentos</a>
+    <a href="{% url 'financas:painel' c.pk %}#cartoes">Cartões</a>
+    <a href="{% url 'financas:painel' c.pk %}#conferencias">Conferir saldo</a>
+    <a href="{% url 'financas:categorias' %}">Categorias</a>
+    <a href="{% url 'financas:conta_editar' c.pk %}">Configurar conta</a>
+  </div>
+</dialog>
+<script>
+(function () {
+  // destaca o item da página atual (no painel, a aba aberta)
+  const painel = "{% url 'financas:painel' c.pk %}", analise = "{% url 'financas:analise' c.pk %}";
+  function marcar() {
+    let atual = null;
+    if (location.pathname === analise) atual = "analise";
+    else if (location.pathname === painel) atual = (location.hash.slice(1) || "extrato").replace("gasto", "extrato");
+    document.querySelectorAll(".nav-inferior [data-nav]").forEach((a) => {
+      if (a.dataset.nav === atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+  }
+  marcar();
+  window.addEventListener("hashchange", marcar);
+  // escolher uma opção fecha a folha (no painel, só muda a aba)
+  const folha = document.getElementById("acoes-rapidas");
+  folha.addEventListener("click", (e) => {
+    if (e.target === folha || e.target.closest("a")) folha.close();   // toque fora da folha também fecha
+  });
+})();
+</script>

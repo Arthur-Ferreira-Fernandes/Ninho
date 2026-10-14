@@ -14,6 +14,10 @@ Cada família tem seu espaço (multi-tenant), e as pessoas entram por convite.
   acabam e itens sem categoria para classificar. Os três destaques mais importantes aparecem no topo do painel.
 - **Objetivos** (aba Investimentos): para que se está guardando, com progresso, ritmo e quando chega. O guardado do
   mês vai para o objetivo marcado como padrão; avulsos e a sobra do mês podem ir para qualquer um.
+- **Atualização automática**: toda alteração salva avança a versão da família (`financas/tempo_real.py`); as
+  telas abertas em qualquer aparelho consultam `/versao/` a cada 5 segundos e trocam o conteúdo sem recarregar a
+  página. Quem estiver preenchendo um formulário não perde o que digitou: só aparece um aviso para atualizar.
+- **Celular**: barra de navegação embaixo (Hoje, Mês, Análise, Guardar) com o botão "+" para lançar qualquer coisa.
 - **Importar extrato** (OFX ou CSV do banco): cada transação é comparada com o planejamento (salário, contas fixas,
   fatura, guardado do mês) para não contar duas vezes; o que já foi importado é reconhecido pelo identificador.
 
