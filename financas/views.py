@@ -18,6 +18,7 @@ from .calculos import (detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_esca
                        simular_mes)
 from .forms import (PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
                     LancamentoForm, PagamentosSalarioFormSet, UsoDiarioForm, UsuarioForm)
+from .insights import alertas as alertas_analise, categorias_do_mes, projecao_objetivo
 from .templatetags.dinheiro import brl
 from .models import (Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
                      gerar_codigo_convite)
@@ -66,6 +67,11 @@ def _modelo(nome):
         return MODELOS[nome]
     except KeyError:
         raise Http404
+
+
+def _kwargs_form(modelo, conta):
+    """Contas fixas e lançamentos têm categoria: o form precisa das categorias da família."""
+    return {"familia": conta.familia} if modelo in ("fixa", "lancamento") else {}
 
 
 def com_familia(view):
@@ -345,6 +351,8 @@ def _investimentos(conta, hoje, meses_a_frente=12):
         referencia = g.aporte.referencia if (g.aporte and not g.avulso) else g.data.replace(day=1)
         if g.avulso:
             situacao = "agendado" if g.data > hoje else "avulso"
+        elif g.nao_guardado:
+            situacao = "nao_guardado"
         elif g.confirmado:
             situacao = "confirmado"
         elif referencia > hoje.replace(day=1):
@@ -362,6 +370,7 @@ def _investimentos(conta, hoje, meses_a_frente=12):
         "total_12": linhas[-1]["acumulado"] if linhas else Decimal("0"),
         "confirmados": sum(1 for l in mensais_passados if l["situacao"] == "confirmado"),
         "pendentes": sum(1 for l in mensais_passados if l["situacao"] == "pendente"),
+        "nao_guardados": sum(1 for l in mensais_passados if l["situacao"] == "nao_guardado"),
         "avulsos": sum((l["valor"] for l in linhas if l["g"].avulso and l["data"] <= hoje), Decimal("0")),
         "proximo": next((l for l in linhas if l["data"] > hoje and not l["g"].avulso), None),
     }
@@ -586,7 +595,11 @@ def painel(request, pk):
 
     anterior = primeiro - timedelta(days=1)
     seguinte = primeiro + timedelta(days=32)
+    categorias = {c.pk: c for c in conta.familia.lista_categorias()}
+    destaques = alertas_analise(conta, hoje, categorias, categorias_do_mes(conta, hoje.replace(day=1), hoje, categorias))
     return render(request, "financas/painel.html", {
+        "destaques": destaques[:3],
+        "mais_destaques": len(destaques) - 3,
         "conta": conta,
         "hoje": hoje,
         "dias": dias,
@@ -620,6 +633,7 @@ def painel(request, pk):
         "dia_a_dia": _dia_a_dia_do_mes(conta, hoje),
         "guardar": _guardar_info(conta, hoje),
         "investimentos": _investimentos(conta, hoje),
+        "objetivos": [projecao_objetivo(o, conta, hoje) for o in conta.objetivos.prefetch_related("aportes")],
         "totais_fixas": {
             "receitas": receitas_fixas,
             "despesas": despesas_fixas + assinaturas["total_mes"],
@@ -636,6 +650,7 @@ def painel(request, pk):
         "compras": _compras_com_andamento(conta, hoje),
         "assinaturas": assinaturas,
         "form_conferencia": ConferenciaForm(initial={"data": selecionado}),
+        "categorias": list(categorias.values()),
     })
 
 
@@ -792,6 +807,10 @@ def aporte_confirmar(request, pk):
         messages.error(request, "Só dá para confirmar meses que já começaram.")
         return _aba_investimentos(conta)
     existente = conta.aportes.filter(tipo=Aporte.MENSAL, referencia=referencia).first()
+    if "nao_guardei" in request.POST:
+        _marcar_nao_guardado(conta, referencia, existente, _data_param(request.POST, "data"), hoje)
+        messages.success(request, f"{referencia:%m/%Y} marcado como não guardado: o valor continua na conta.")
+        return _aba_investimentos(conta)
     form = AporteForm(request.POST, conta=conta, hoje=hoje,
                       instance=existente or Aporte(conta=conta, tipo=Aporte.MENSAL, referencia=referencia))
     if form.is_valid():
@@ -800,6 +819,16 @@ def aporte_confirmar(request, pk):
     else:
         _mostrar_erros(request, form)
     return _aba_investimentos(conta)
+
+
+def _marcar_nao_guardado(conta, referencia, existente, data, hoje):
+    """Registra que não deu para guardar no mês: confirmação com valor zero (nada sai da conta)."""
+    fim_do_mes = referencia.replace(day=calendar.monthrange(referencia.year, referencia.month)[1])
+    # a data só ordena a linha na lista; fica dentro do mês, até hoje e depois do início da conta
+    data = max(min(data or fim_do_mes, fim_do_mes, hoje), referencia, conta.data_inicio)
+    aporte = existente or Aporte(conta=conta, tipo=Aporte.MENSAL, referencia=referencia)
+    aporte.data, aporte.valor, aporte.descricao, aporte.objetivo = data, Decimal("0"), "", None
+    aporte.save()
 
 
 @require_POST
@@ -821,7 +850,9 @@ def aporte_avulso(request, pk):
 def aporte_excluir(request, aporte_pk):
     aporte = get_object_or_404(Aporte, pk=aporte_pk, conta__familia=request.familia)
     conta = aporte.conta
-    if aporte.tipo == Aporte.MENSAL:
+    if aporte.nao_guardado:
+        messages.success(request, f"{aporte.referencia:%m/%Y} desmarcado; volta a valer a previsão.")
+    elif aporte.tipo == Aporte.MENSAL:
         messages.success(request, f"Confirmação de {aporte.referencia:%m/%Y} desfeita; volta a valer a previsão.")
     else:
         messages.success(request, f"Valor avulso de {brl(aporte.valor)} em {aporte.data:%d/%m} excluído.")
@@ -1084,7 +1115,8 @@ def compra_excluir(request, compra_pk):
 def item_novo(request, pk, modelo):
     conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
     Model, Form, titulo = _modelo(modelo)
-    form = Form(request.POST or None, initial={"data": _data_param(request, "data") or date.today()})
+    form = Form(request.POST or None, initial={"data": _data_param(request, "data") or date.today()},
+                **_kwargs_form(modelo, conta))
     if form.is_valid():
         item = form.save(commit=False)
         item.conta = conta
@@ -1099,7 +1131,7 @@ def item_novo(request, pk, modelo):
 def item_editar(request, modelo, item_pk):
     Model, Form, titulo = _modelo(modelo)
     item = get_object_or_404(Model, pk=item_pk, conta__familia=request.familia)
-    form = Form(request.POST or None, instance=item)
+    form = Form(request.POST or None, instance=item, **_kwargs_form(modelo, item.conta))
     if form.is_valid():
         form.save()
         return _voltar_ao_painel(modelo, item, request.GET.get("voltar"))

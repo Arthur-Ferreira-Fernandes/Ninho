@@ -171,7 +171,7 @@ def _usos(conta, inicio, fim):
 def _gastos(conta, inicio, fim):
     """Gastos detalhados do dia a dia por data: {data: [GastoDia, ...]}."""
     por_data = {}
-    for g in conta.gastos_dia.filter(data__gte=inicio, data__lte=fim):
+    for g in conta.gastos_dia.filter(data__gte=inicio, data__lte=fim).select_related("categoria"):
         por_data.setdefault(g.data, []).append(g)
     return por_data
 
@@ -379,6 +379,8 @@ def extrato_mes(conta, ano, mes):
         return dias
     inicio_mes = ativos[0].data
     for g in guardados(conta, dias[0].data, dias[-1].data):
+        if g.nao_guardado:
+            continue   # nada saiu da conta
         dias[g.data.day - 1].movimentos.append(Movimento(g.nome, g.valor, False, "guardar", g))
 
     # ponto de partida: fim do dia anterior ao primeiro dia ativo do mês
@@ -709,6 +711,11 @@ class Guardar:
         if self.avulso:
             return "Guardado avulso" + (f": {self.aporte.descricao}" if self.aporte.descricao else "")
         return "Guardado no mês" if self.confirmado else "Guardar no mês"
+
+    @property
+    def nao_guardado(self):
+        """Mês marcado como "não consegui guardar": o dinheiro ficou na conta."""
+        return self.confirmado and not self.avulso and self.valor == 0
 
 
 def _aportes(conta):

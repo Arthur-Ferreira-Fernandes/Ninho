@@ -1,0 +1,61 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}Revisar importação · {{ conta.nome }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:importar' conta.pk %}">← Escolher outro arquivo</a>
+
+<h1>Revisar a importação</h1>
+<p class="sub rotulo">{{ total }} transaç{{ total|pluralize:"ão,ões" }} de {{ periodo.0|date:"d/m/Y" }} a {{ periodo.1|date:"d/m/Y" }}. Confira o que fazer com cada uma; as sugestões já evitam contar duas vezes o que está no planejamento.</p>
+
+<form method="post" class="card importar-revisao">{% csrf_token %}
+  <div class="tabela-rolagem-x">
+  <table class="lista">
+    <thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th>O que fazer</th><th>Categoria</th></tr></thead>
+    <tbody>
+    {% for t in transacoes %}
+    <tr class="{% if t.acao == 'ignorar' %}ignorada{% endif %}" data-linha>
+      <td class="data-curta">{{ t.data|date:"d/m/y" }}</td>
+      <td>{{ t.descricao }}<small class="rotulo bloco">{{ t.motivo }}</small></td>
+      <td class="num {% if t.saida %}neg{% else %}pos{% endif %}"><b>{% if t.saida %}−{% else %}+{% endif %}{{ t.absoluto|brl }}</b></td>
+      <td>
+        <select name="acao-{{ forloop.counter0 }}" aria-label="O que fazer com {{ t.descricao }}" data-acao>
+          {% for valor, rotulo in t.opcoes %}<option value="{{ valor }}"{% if valor == t.acao %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+        </select>
+      </td>
+      <td>
+        {% if t.saida %}
+        <select name="categoria-{{ forloop.counter0 }}" aria-label="Categoria de {{ t.descricao }}" data-categoria>
+          <option value="">Automática</option>
+          {% for c in categorias %}<option value="{{ c.pk }}"{% if c.pk == t.categoria_id %} selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+        </select>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="importar-acoes">
+    <button type="submit" class="btn"><span>Importar <span id="contagem">{{ a_importar }}</span> transações</span></button>
+    <button type="submit" name="cancelar" value="1" class="btn sec" formnovalidate>Cancelar</button>
+    <small class="rotulo">Nada é gravado até você clicar em Importar.</small>
+  </div>
+</form>
+<script>
+(function () {
+  const linhas = document.querySelectorAll("[data-linha]");
+  function atualizar() {
+    let n = 0;
+    linhas.forEach((tr) => {
+      const acao = tr.querySelector("[data-acao]").value;
+      const cat = tr.querySelector("[data-categoria]");
+      tr.classList.toggle("ignorada", acao === "ignorar");
+      if (cat) cat.disabled = !(acao === "gasto" || acao === "saida");
+      if (acao !== "ignorar") n++;
+    });
+    document.getElementById("contagem").textContent = n;
+  }
+  document.querySelector(".importar-revisao").addEventListener("change", atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

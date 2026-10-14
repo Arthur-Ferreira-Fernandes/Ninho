@@ -1,0 +1,29 @@
+{% load dinheiro %}
+{% if objetivos %}
+<ul class="objetivos-lista">
+  {% for p in objetivos %}{% with o=p.objetivo %}
+  <li class="objetivo{% if o.concluido %} concluido{% endif %}">
+    <div class="obj-cab">
+      <strong>{{ o.nome }}</strong>
+      {% if o.padrao %}<span class="etiqueta etiqueta-guardar">recebe o guardado do mês</span>{% endif %}
+      {% if o.concluido %}<span class="pago-selo">✓ alcançado</span>{% endif %}
+      <a class="acao-item" href="{% url 'financas:objetivo_editar' o.pk %}">Editar</a>
+    </div>
+    <div class="obj-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ o.pct }}" aria-label="{{ o.nome }}: {{ o.pct }}%"><i style="width: {{ o.pct }}%"></i></div>
+    <div class="obj-numeros">
+      <span><b>{{ o.guardado|brl }}</b> de {{ o.valor_alvo|brl }} · {{ o.pct }}%</span>
+      {% if not o.concluido %}<span class="rotulo">faltam {{ p.falta|brl }}</span>{% endif %}
+    </div>
+    {% if not o.concluido %}
+    <p class="obj-previsao">
+      {% if p.chega_em %}No ritmo atual ({{ p.ritmo|brl }}/mês), chega em <b>{{ p.chega_em|date:"F/Y"|lower }}</b>.
+      {% else %}Ainda sem ritmo: confirme o guardado do mês ou guarde um avulso escolhendo este objetivo.{% endif %}
+      {% if p.por_mes_prazo %}Para chegar até {{ o.prazo|date:"m/Y" }}: <b>{{ p.por_mes_prazo|brl }}/mês</b>{% if p.no_prazo is False %} <span class="neg">(no ritmo atual, não chega a tempo)</span>{% elif p.no_prazo %} <span class="pos">(no ritmo atual, chega a tempo)</span>{% endif %}.{% endif %}
+    </p>
+    {% endif %}
+  </li>
+  {% endwith %}{% endfor %}
+</ul>
+{% else %}
+<p class="vazio-texto">Dê um destino ao que você guarda: reserva de emergência (o ideal é ter de 3 a 6 meses de gastos), uma viagem, um carro. O {{ marca.nome }} mostra o progresso e quando você chega lá.</p>
+{% endif %}

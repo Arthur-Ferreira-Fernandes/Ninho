@@ -1,0 +1,57 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}{% if item %}Editar {{ item.nome }}{% else %}Novo objetivo{% endif %} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}#investimentos">← {{ conta.nome }}</a>
+
+<div class="pagina-estreita">
+  <form method="post" novalidate class="card">{% csrf_token %}
+    <h2 class="titulo-form">{% if item %}Editar objetivo{% else %}Novo objetivo{% endif %}</h2>
+    <p class="sub">Para que você está guardando. O dinheiro guardado em Investimentos (do mês ou avulso) pode ir para um objetivo.</p>
+    {% for erro in form.non_field_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}
+
+    {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
+    <div class="atalhos" aria-label="Sugestões">
+      <button type="button" data-nome="Reserva de emergência">Reserva de emergência</button>
+      <button type="button" data-nome="Viagem">Viagem</button>
+      <button type="button" data-nome="Carro">Carro</button>
+      <button type="button" data-nome="Entrada da casa">Entrada da casa</button>
+      <button type="button" data-nome="Estudos">Estudos</button>
+    </div>
+    <div class="campos-2">
+      {% with field=form.valor_alvo %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      {% with field=form.prazo %}{% include "financas/_campo.html" %}{% endwith %}
+    </div>
+    {% with field=form.valor_inicial %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+    <label class="interruptor">
+      {{ form.padrao }}
+      <span class="interruptor-trilho" aria-hidden="true"></span>
+      <span><strong>{{ form.padrao.label }}</strong><small>{{ form.padrao.help_text }}</small></span>
+    </label>
+
+    {% if projecao %}
+    <div class="alerta info">
+      Guardado até agora: <b>{{ item.guardado|brl }}</b> de {{ item.valor_alvo|brl }}.
+      {% if projecao.chega_em %}No ritmo atual, chega em {{ projecao.chega_em|date:"F/Y"|lower }}.{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="acoes-form linha-botoes">
+      <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Criar objetivo{% endif %}</button>
+      <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#investimentos">Cancelar</a>
+    </div>
+  </form>
+  {% if item %}
+  <form method="post" action="{% url 'financas:objetivo_excluir' item.pk %}"
+        onsubmit="return confirm('Excluir o objetivo {{ item.nome|escapejs }}? O dinheiro guardado continua contado em Investimentos.')">{% csrf_token %}
+    <button class="btn fantasma perigo-texto" type="submit">Excluir objetivo</button>
+  </form>
+  {% endif %}
+</div>
+<script>
+document.querySelectorAll("[data-nome]").forEach((b) => b.addEventListener("click", () => {
+  const campo = document.querySelector("[name=nome]");
+  campo.value = b.dataset.nome;
+  document.querySelector("[name=valor_alvo]").focus();
+}));
+</script>
+{% endblock %}

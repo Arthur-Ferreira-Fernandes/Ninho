@@ -42,6 +42,8 @@
       {% with field=form.fim %}{% include "financas/_campo.html" %}{% endwith %}
     </div>
 
+    {% include "financas/_campo_categoria.html" %}
+
     <div class="acoes-form linha-botoes">
       <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar assinatura{% endif %}</button>
       <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#contas">Cancelar</a>

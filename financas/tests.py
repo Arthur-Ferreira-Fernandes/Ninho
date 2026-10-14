@@ -224,6 +224,25 @@ class ContaFormTests(TestCase):
         # segunda conta já usa o layout normal
         self.assertTemplateUsed(self.client.get(self.url), "financas/base.html")
 
+    def test_descricao_dos_pagamentos(self):
+        self.post(modo_gasto="percentual", percentual_gasto="30",
+                  **pagamentos(("5", "4000"), ("20", "3000")),
+                  **{"salario-0-descricao": "Salário da Ana", "salario-1-descricao": ""})
+        conta = Conta.objects.get()
+        self.assertEqual(list(conta.fixas.order_by("dia").values_list("descricao", "nome")),
+                         [("Salário da Ana", "Salário da Ana (dia 5)"), ("", "Salário (dia 20)")])
+        url = reverse("financas:conta_editar", args=[conta.pk])
+        self.assertContains(self.client.get(url), 'value="Salário da Ana"')
+        # removido o dia 20, o nome do único pagamento dispensa o dia; apagar a descrição volta ao padrão
+        ana, outro = conta.fixas.order_by("dia")
+        self.post(url, modo_gasto="percentual", percentual_gasto="30",
+                  **pagamentos(("5", "4000", ana.pk), ("20", "3000", outro.pk, True), existentes=2),
+                  **{"salario-0-descricao": "Salário da Ana"})
+        self.assertEqual(conta.fixas.get().nome, "Salário da Ana")
+        self.post(url, modo_gasto="percentual", percentual_gasto="30",
+                  **pagamentos(("5", "4000", ana.pk), existentes=1), **{"salario-0-descricao": ""})
+        self.assertEqual(conta.fixas.get().nome, "Salário")
+
     def test_linha_em_branco_e_ignorada(self):
         self.post(modo_gasto="percentual", percentual_gasto="30", **pagamentos(("5", "4000"), ("", "")))
         conta = Conta.objects.get()
@@ -314,6 +333,21 @@ class ContaFixaFormTests(TestCase):
         self.client.post(url, {"tipo": "despesa", "nome": "Salário", "valor": "4200", "dia": "6", "ativa": "on"})
         fixa.refresh_from_db()
         self.assertEqual((fixa.tipo, fixa.valor, fixa.dia), (ContaFixa.RECEITA, Decimal("4200"), 6))
+
+    def test_descricao_do_salario_na_edicao(self):
+        for dia in (5, 20):
+            ContaFixa.objects.create(conta=self.conta, nome=f"Salário (dia {dia})", valor=2000, dia=dia,
+                                     tipo=ContaFixa.RECEITA, salario=True)
+        fixa = self.conta.fixas.get(dia=5)
+        url = reverse("financas:item_editar", args=["fixa", fixa.pk])
+        self.client.post(url, {"nome": "Salário do Arthur", "valor": "2000", "dia": "5", "ativa": "on"})
+        fixa.refresh_from_db()
+        self.assertEqual((fixa.descricao, fixa.nome), ("Salário do Arthur", "Salário do Arthur (dia 5)"))
+        # o campo mostra a descrição, não o nome montado; vazio é permitido
+        self.assertContains(self.client.get(url), 'value="Salário do Arthur"')
+        self.client.post(url, {"nome": "", "valor": "2000", "dia": "5", "ativa": "on"})
+        fixa.refresh_from_db()
+        self.assertEqual((fixa.descricao, fixa.nome), ("", "Salário (dia 5)"))
 
     def test_desativar(self):
         fixa = ContaFixa.objects.create(conta=self.conta, nome="Academia", valor=100, dia=5)
@@ -1426,6 +1460,37 @@ class AporteTests(TestCase):
         self.assertEqual(jan["situacao"], "confirmado")
         self.client.post(reverse("financas:aporte_excluir", args=[a.pk]))
         self.assertFalse(Aporte.objects.exists())
+
+    def test_nao_consegui_guardar(self):
+        url = reverse("financas:aporte_confirmar", args=[self.conta.pk])
+        # o botão "Não consegui" vai no mesmo formulário, sem exigir o valor
+        r = self.client.post(url, {"referencia": "2026-01-01", "valor": "", "data": "2026-01-05", "nao_guardei": ""})
+        self.assertRedirects(r, self.painel + "#investimentos", fetch_redirect_response=False)
+        a = Aporte.objects.get()
+        self.assertEqual((a.tipo, a.valor, a.data, a.nao_guardado), (Aporte.MENSAL, Decimal("0"), date(2026, 1, 5), True))
+        # nada sai da conta: o saldo fica com o valor que seria guardado, e o extrato não mostra o guardar
+        self.assertEqual(saldo_esperado(self.nova(), date(2026, 1, 31)).esperado, Decimal("5000"))
+        movimentos = [m.origem for d in extrato_mes(self.nova(), 2026, 1) for m in d.movimentos]
+        self.assertNotIn("guardar", movimentos)
+        r = self.client.get(self.painel)
+        inv = r.context["investimentos"]
+        jan = [l for l in inv["linhas"] if l["referencia"] == date(2026, 1, 1)][0]
+        self.assertEqual((jan["situacao"], jan["g"].previsto), ("nao_guardado", Decimal("500")))
+        self.assertEqual((inv["nao_guardados"], inv["confirmados"]), (1, 0))
+        self.assertContains(r, "✗ não guardado")
+        # desfazer volta para a previsão
+        self.client.post(reverse("financas:aporte_excluir", args=[a.pk]))
+        self.assertFalse(Aporte.objects.exists())
+        self.assertEqual(saldo_esperado(self.nova(), date(2026, 1, 31)).esperado, Decimal("4500"))
+
+    def test_nao_consegui_depois_de_confirmar_e_data_fora_do_mes(self):
+        url = reverse("financas:aporte_confirmar", args=[self.conta.pk])
+        self.client.post(url, {"referencia": "2026-01-01", "valor": "450", "data": "2026-01-06"})
+        self.client.post(url, {"referencia": "2026-01-01", "data": "2026-03-10", "nao_guardei": ""})
+        a = Aporte.objects.get()   # a mesma confirmação, trocada para "não guardado", com a data dentro do mês
+        self.assertEqual((a.valor, a.data), (Decimal("0"), date(2026, 1, 31)))
+        self.client.post(url, {"referencia": "2099-01-01", "nao_guardei": ""})   # mês futuro
+        self.assertEqual(Aporte.objects.count(), 1)
 
     def test_validacoes(self):
         url = reverse("financas:aporte_confirmar", args=[self.conta.pk])

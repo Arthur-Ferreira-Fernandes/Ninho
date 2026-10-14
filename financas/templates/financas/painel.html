@@ -7,9 +7,11 @@
     <p class="rotulo">Calculando desde {{ conta.data_inicio|date:"d/m/Y" }} · {{ conta.orcamento_mensal|brl }}/mês para o dia a dia{% if conta.modo_gasto == "percentual" %} ({{ conta.percentual_gasto|floatformat:"-2" }}% do salário){% endif %}</p>
   </div>
   <div class="painel-acoes">
+    <a class="btn" href="{% url 'financas:analise' conta.pk %}">Análise</a>
     <a class="btn sec" href="{% url 'financas:lancamento_novo' conta.pk %}?data={{ dia.data|date:'Y-m-d' }}">+ Lançamento</a>
     <a class="btn sec" href="{% url 'financas:compra_nova' conta.pk %}?data={{ dia.data|date:'Y-m-d' }}">+ Compra no cartão</a>
     <a class="btn sec" href="{% url 'financas:fixa_nova' conta.pk %}">+ Conta fixa</a>
+    <a class="btn sec" href="{% url 'financas:importar' conta.pk %}">Importar extrato</a>
     <a class="btn sec" href="{% url 'financas:conta_editar' conta.pk %}">Configurar</a>
   </div>
 </div>
@@ -26,6 +28,19 @@
     Pior momento nos próximos 60 dias: {{ alerta.pior_valor|brl }} em <a href="?mes={{ alerta.pior_em|date:'Y-m' }}&dia={{ alerta.pior_em|date:'Y-m-d' }}#extrato">{{ alerta.pior_em|date:"d/m" }}</a>.
   </div>
 </div>
+{% endif %}
+
+{% if destaques %}
+<ul class="destaques compactos" aria-label="Destaques da análise">
+  {% for a in destaques %}
+  <li class="destaque {{ a.nivel }}">
+    <span class="destaque-icone" aria-hidden="true">{% if a.nivel == "bom" %}✓{% elif a.nivel == "info" %}i{% else %}!{% endif %}</span>
+    <div><strong>{{ a.titulo }}</strong><p>{{ a.texto }}</p></div>
+    <a class="destaque-link" href="{% url 'financas:analise' conta.pk %}#{{ a.ancora }}">Ver</a>
+  </li>
+  {% endfor %}
+  {% if mais_destaques > 0 %}<li class="destaques-mais"><a href="{% url 'financas:analise' conta.pk %}#alertas">+ {{ mais_destaques }} na análise</a></li>{% endif %}
+</ul>
 {% endif %}
 
 <div class="kpis">
@@ -131,7 +146,7 @@
           <ul class="gastos-lista">
             {% for g in dia.itens %}
             <li>
-              <span>{{ g.descricao|default:"Gasto" }}</span>
+              <span>{{ g.descricao|default:"Gasto" }}{% if g.categoria %} <small class="cat-chip">{{ g.categoria.nome }}</small>{% endif %}</span>
               <b>{{ g.valor|brl }}</b>
               <form method="post" action="{% url 'financas:gasto_dia_excluir' g.pk %}">{% csrf_token %}
                 <button type="submit" class="gasto-remover" aria-label="Excluir {{ g.descricao|default:'gasto' }} de {{ g.valor|brl }}" title="Excluir">×</button>
@@ -148,6 +163,10 @@
               <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" placeholder="0,00" required aria-label="Valor do gasto">
             </div>
             <button type="submit" class="btn" aria-label="Adicionar gasto">+</button>
+            <select name="categoria" aria-label="Categoria do gasto" class="gasto-categoria">
+              <option value="">Categoria automática</option>
+              {% for c in categorias %}<option value="{{ c.pk }}">{{ c.nome }}</option>{% endfor %}
+            </select>
           </form>
           <datalist id="sugestoes-gasto">
             <option value="Mercado"><option value="Padaria"><option value="Transporte"><option value="Lanche">
@@ -505,7 +524,7 @@
             {% if guardar %}
               <span class="etiqueta etiqueta-guardar">{% if conta.guardar_modo == "percentual" %}{{ conta.guardar_percentual|floatformat:"-2" }}% do salário{% else %}valor fixo{% endif %}</span>
               <small class="guardar-info">no dia de maior saldo do mês ·
-                {% if guardar.este_mes %}{{ hoje|date:"F"|lower }}: dia {{ guardar.este_mes.data|date:"d/m" }}{% if guardar.este_mes.data <= hoje %} ✓{% endif %}{% endif %}{% if guardar.proximo %} · próximo: {{ guardar.proximo.data|date:"d/m" }}{% endif %}
+                {% if guardar.este_mes %}{{ hoje|date:"F"|lower }}: dia {{ guardar.este_mes.data|date:"d/m" }}{% if guardar.este_mes.nao_guardado %} ✗ não guardado{% elif guardar.este_mes.data <= hoje %} ✓{% endif %}{% endif %}{% if guardar.proximo %} · próximo: {{ guardar.proximo.data|date:"d/m" }}{% endif %}
                 · guardado até hoje: <b>{{ guardar.total|brl }}</b></small>
             {% else %}
               <small class="guardar-info">Escolha uma porcentagem do salário ou um valor fixo para guardar todo mês.</small>
@@ -720,7 +739,7 @@
     <div class="kpi kpi-invest">
       <span class="rotulo">Guardado até hoje</span>
       <strong>{{ investimentos.total_hoje|brl }}</strong>
-      <small class="rotulo">{{ investimentos.confirmados }} {% if investimentos.confirmados == 1 %}mês confirmado{% else %}meses confirmados{% endif %}{% if investimentos.avulsos %} · {{ investimentos.avulsos|brl }} avulso{% endif %}</small>
+      <small class="rotulo">{{ investimentos.confirmados }} {% if investimentos.confirmados == 1 %}mês confirmado{% else %}meses confirmados{% endif %}{% if investimentos.nao_guardados %} · {{ investimentos.nao_guardados }} sem guardar{% endif %}{% if investimentos.avulsos %} · {{ investimentos.avulsos|brl }} avulso{% endif %}</small>
     </div>
     <div class="kpi kpi-invest">
       <span class="rotulo">Daqui a 12 meses</span>
@@ -734,7 +753,7 @@
     </div>
   </div>
   {% if investimentos.pendentes %}
-  <div class="alerta aviso-amarelo">Você tem {{ investimentos.pendentes }} {% if investimentos.pendentes == 1 %}mês{% else %}meses{% endif %} para confirmar. Informe quanto guardou de fato em cada um (eles contam com o valor previsto até lá).</div>
+  <div class="alerta aviso-amarelo">Você tem {{ investimentos.pendentes }} {% if investimentos.pendentes == 1 %}mês{% else %}meses{% endif %} para confirmar. Informe quanto guardou de fato em cada um, ou marque “Não consegui” (eles contam com o valor previsto até lá).</div>
   {% endif %}
   {% endif %}
 
@@ -772,6 +791,12 @@
                 <form method="post" action="{% url 'financas:aporte_excluir' l.g.aporte.pk %}" class="inline">{% csrf_token %}
                   <button type="submit" class="acao-item">Desfazer</button>
                 </form>
+              {% elif l.situacao == "nao_guardado" %}
+                <span class="pago-selo nao-guardado-selo">✗ não guardado</span>
+                {% if l.g.previsto %}<small class="rotulo">previsto {{ l.g.previsto|brl }}</small>{% endif %}
+                <form method="post" action="{% url 'financas:aporte_excluir' l.g.aporte.pk %}" class="inline">{% csrf_token %}
+                  <button type="submit" class="acao-item">Desfazer</button>
+                </form>
               {% elif l.situacao == "previsto" %}
                 <span class="etiqueta neutra">previsto</span>
               {% else %}
@@ -784,12 +809,22 @@
                   </div>
                   <input type="date" name="data" required aria-label="Data em que guardou"
                          value="{% if l.data > hoje %}{{ hoje|date:'Y-m-d' }}{% else %}{{ l.data|date:'Y-m-d' }}{% endif %}">
-                  <button type="submit" class="btn">Guardei</button>
+                  {% if objetivos %}
+                  <select name="objetivo" aria-label="Para qual objetivo" class="confirmar-objetivo">
+                    {% for p in objetivos %}<option value="{{ p.objetivo.pk }}"{% if p.objetivo.padrao %} selected{% endif %}>{{ p.objetivo.nome }}</option>{% endfor %}
+                    <option value="">Sem objetivo</option>
+                  </select>
+                  {% endif %}
+                  <div class="confirmar-botoes">
+                    <button type="submit" class="btn">Guardei</button>
+                    <button type="submit" class="btn sec" name="nao_guardei" formnovalidate
+                            title="Não deu para guardar neste mês: o valor fica na conta">Não consegui</button>
+                  </div>
                 </form>
               {% endif %}
             {% endif %}
           </td>
-          <td class="num">{{ l.valor|brl }}</td>
+          <td class="num">{% if l.situacao == "nao_guardado" %}—{% else %}{{ l.valor|brl }}{% endif %}</td>
           <td class="num"><b>{{ l.acumulado|brl }}</b></td>
         </tr>
         {% endfor %}
@@ -825,9 +860,29 @@
           <label for="avulso-descricao">Descrição <span class="opcional">(opcional)</span></label>
           <div class="campo-input"><input type="text" name="descricao" id="avulso-descricao" maxlength="120" placeholder="Ex.: 13º, bônus, sobra do mês"></div>
         </div>
+        {% if objetivos %}
+        <div class="campo">
+          <label for="avulso-objetivo">Para qual objetivo</label>
+          <select name="objetivo" id="avulso-objetivo">
+            {% for p in objetivos %}<option value="{{ p.objetivo.pk }}"{% if p.objetivo.padrao %} selected{% endif %}>{{ p.objetivo.nome }}</option>{% endfor %}
+            <option value="">Sem objetivo</option>
+          </select>
+        </div>
+        {% endif %}
         <button type="submit" class="btn bloco">Guardar</button>
       </form>
     </div>
+  </div>
+
+  <div class="card" id="objetivos">
+    <div class="topo">
+      <div>
+        <h2 style="margin:0">Objetivos</h2>
+        <p class="rotulo" style="margin:4px 0 0">Para que você está guardando, quanto falta e quando chega.</p>
+      </div>
+      <a class="btn" href="{% url 'financas:objetivo_novo' conta.pk %}">+ Novo objetivo</a>
+    </div>
+    {% include "financas/_objetivos.html" %}
   </div>
 </div>
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, PedidoEntrada, UsoDiario
+from .models import Aporte, Categoria, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, Objetivo, PedidoEntrada, UsoDiario
 
 
 class MembroInline(admin.TabularInline):
@@ -32,7 +32,7 @@ class ContaAdmin(admin.ModelAdmin):
 
 @admin.register(Lancamento)
 class LancamentoAdmin(admin.ModelAdmin):
-    list_display = ["data", "descricao", "tipo", "valor", "conta"]
+    list_display = ["data", "descricao", "tipo", "valor", "categoria", "conta"]
     list_filter = ["tipo", "conta"]
 
 
@@ -70,10 +70,21 @@ class PagamentoContaAdmin(admin.ModelAdmin):
 
 @admin.register(Aporte)
 class AporteAdmin(admin.ModelAdmin):
-    list_display = ["conta", "tipo", "referencia", "data", "valor", "descricao"]
+    list_display = ["conta", "tipo", "referencia", "data", "valor", "descricao", "objetivo"]
     list_filter = ["tipo"]
 
 
 @admin.register(GastoDia)
 class GastoDiaAdmin(admin.ModelAdmin):
-    list_display = ["data", "descricao", "valor", "conta"]
+    list_display = ["data", "descricao", "valor", "categoria", "conta"]
+
+
+@admin.register(Categoria)
+class CategoriaAdmin(admin.ModelAdmin):
+    list_display = ["nome", "familia", "limite_mensal", "ordem"]
+    list_filter = ["familia"]
+
+
+@admin.register(Objetivo)
+class ObjetivoAdmin(admin.ModelAdmin):
+    list_display = ["nome", "conta", "valor_alvo", "valor_inicial", "prazo", "padrao"]

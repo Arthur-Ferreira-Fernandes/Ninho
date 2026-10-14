@@ -1,0 +1,46 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}Categorias · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+{% if voltar_conta %}<a class="voltar" href="{% url 'financas:analise' voltar_conta.pk %}#categorias">← Análise de {{ voltar_conta.nome }}</a>{% endif %}
+
+<div class="pagina-estreita">
+  <h1>Categorias</h1>
+  <p class="sub">Para onde vai o dinheiro. Gastos do dia, compras no cartão, assinaturas, contas fixas e lançamentos de saída podem ter uma categoria. Sem escolher, o {{ marca.nome }} sugere pela descrição. Com um <b>limite por mês</b>, a análise avisa quando a categoria se aproxima dele.</p>
+
+  <div class="card">
+    <ul class="categorias-lista">
+      {% for c in categorias %}
+      <li>
+        <form method="post" action="{% url 'financas:categoria_editar' c.pk %}" class="categoria-linha">{% csrf_token %}
+          <span class="cat-ponto cor-{{ c.cor }}" aria-hidden="true"></span>
+          <label class="sr" for="{{ c.form.nome.id_for_label }}">Nome</label>
+          {{ c.form.nome }}
+          <div class="campo-input com-prefixo">
+            <span class="prefixo" aria-hidden="true">R$</span>
+            <label class="sr" for="{{ c.form.limite_mensal.id_for_label }}">Limite por mês de {{ c.nome }}</label>
+            {{ c.form.limite_mensal }}
+          </div>
+          <button type="submit" class="btn sec">Salvar</button>
+          <small class="rotulo">{% if c.usos %}{{ c.usos }} ite{{ c.usos|pluralize:"m,ns" }}{% else %}sem itens{% endif %}</small>
+        </form>
+        <form method="post" action="{% url 'financas:categoria_excluir' c.pk %}" class="inline"
+              onsubmit="return confirm('Excluir a categoria {{ c.nome|escapejs }}?{% if c.usos %} Os {{ c.usos }} itens dela ficam sem categoria.{% endif %}')">{% csrf_token %}
+          <button type="submit" class="acao-item perigo-texto" aria-label="Excluir {{ c.nome }}">Excluir</button>
+        </form>
+      </li>
+      {% empty %}
+      <li class="vazio">Nenhuma categoria. Crie a primeira abaixo.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <form method="post" class="card">{% csrf_token %}
+    <h2>Nova categoria</h2>
+    <div class="campos-2">
+      {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
+      {% with field=form.limite_mensal %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+    </div>
+    <button type="submit" class="btn">Criar categoria</button>
+  </form>
+</div>
+{% endblock %}

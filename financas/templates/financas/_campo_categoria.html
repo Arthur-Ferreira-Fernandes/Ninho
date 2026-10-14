@@ -1,0 +1,21 @@
+{% if form.categoria %}
+<div class="bloco-categoria"{% if esconder_com %} data-esconder-com="{{ esconder_com }}"{% endif %}>
+  {% with field=form.categoria %}{% include "financas/_campo.html" %}{% endwith %}
+  <p class="ajuda">Deixe em automática para o {{ marca.nome }} escolher pela descrição. <a href="{% url 'financas:categorias' %}">Gerenciar categorias</a></p>
+</div>
+{% if esconder_com %}
+<script>
+(function () {
+  // categorias são para o que sai: some quando o tipo é entrada/receita
+  const blocos = document.querySelectorAll(".bloco-categoria[data-esconder-com]");
+  const bloco = blocos[blocos.length - 1], form = bloco.closest("form");
+  const ver = () => {
+    const tipo = form.querySelector("[name=tipo]:checked");
+    bloco.hidden = !!tipo && tipo.value === bloco.dataset.esconderCom;
+  };
+  form.addEventListener("change", ver);
+  ver();
+})();
+</script>
+{% endif %}
+{% endif %}

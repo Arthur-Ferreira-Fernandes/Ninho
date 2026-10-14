@@ -1,7 +1,8 @@
 """Ninho como programa do computador: sobe o servidor local e abre o navegador.
 
 Os dados ficam em ~/.local/share/ninho (banco SQLite e chave secreta), fora do executável,
-então trocar o executável por uma versão nova não apaga nada.
+então trocar o executável por uma versão nova não apaga nada. Uma cópia do banco é feita
+por dia em ~/.local/share/ninho/backups (veja financas/backup.py).
 """
 
 import os
@@ -53,6 +54,14 @@ def _configurar_ambiente():
     os.environ.pop("DATABASE_URL", None)
 
 
+def _backups_diarios():
+    """Uma cópia do banco por dia enquanto o programa fica aberto."""
+    from financas.backup import backup_diario
+    while True:
+        time.sleep(60 * 60)
+        backup_diario(PASTA_DADOS)
+
+
 def _abrir_navegador_quando_pronto():
     for _ in range(50):
         if _ja_esta_rodando():
@@ -68,6 +77,11 @@ def main():
 
     _configurar_ambiente()
 
+    # antes das migrações: uma versão nova nunca mexe no banco sem uma cópia do dia
+    from financas.backup import backup_diario
+    backup_diario(PASTA_DADOS)
+    threading.Thread(target=_backups_diarios, daemon=True).start()
+
     import django
     from django.core.management import call_command
     django.setup()
@@ -77,7 +91,7 @@ def main():
     from config.wsgi import application
 
     print(f"Ninho rodando em {ENDERECO}")
-    print(f"Dados em {PASTA_DADOS}")
+    print(f"Dados em {PASTA_DADOS} (cópias diárias em {PASTA_DADOS / 'backups'})")
     print("Feche esta janela (ou Ctrl+C) para encerrar.")
     threading.Thread(target=_abrir_navegador_quando_pronto, daemon=True).start()
     serve(application, host="127.0.0.1", port=PORTA, threads=8, _quiet=True)

@@ -44,6 +44,8 @@
       </div>
     </div>
 
+    {% include "financas/_campo_categoria.html" with esconder_com="entrada" %}
+
     <div class="acoes-form linha-botoes">
       <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Adicionar lançamento{% endif %}</button>
       <a class="btn sec" href="{% url 'financas:painel' conta.pk %}{% if voltar == 'contas' %}#contas{% elif voltar == 'cartoes' %}#cartoes{% else %}{% if base_data %}?mes={{ base_data|date:'Y-m' }}&dia={{ base_data|date:'Y-m-d' }}{% endif %}#extrato{% endif %}">Cancelar</a>

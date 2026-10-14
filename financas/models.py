@@ -21,12 +21,76 @@ class Familia(models.Model):
     nome = models.CharField(max_length=100)
     codigo_convite = models.CharField(max_length=8, unique=True, default=gerar_codigo_convite)
     criada_em = models.DateTimeField(auto_now_add=True)
+    # as categorias padrão são criadas uma vez; depois a família pode apagar as que não quiser
+    categorias_iniciadas = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "família"
 
     def __str__(self):
         return self.nome
+
+    def lista_categorias(self):
+        """Categorias da família, criando as padrão na primeira vez."""
+        if not self.categorias_iniciadas:
+            from .categorias import NOMES_PADRAO
+            existentes = set(self.categorias.values_list("nome", flat=True))
+            Categoria.objects.bulk_create([Categoria(familia=self, nome=nome, ordem=i)
+                                           for i, nome in enumerate(NOMES_PADRAO) if nome not in existentes])
+            self.categorias_iniciadas = True
+            self.save(update_fields=["categorias_iniciadas"])
+        return self.categorias.all()
+
+    def sugerir_categoria(self, descricao):
+        """Categoria para uma descrição: a última usada com a mesma descrição na família;
+        senão, a das palavras-chave (Mercado, Transporte...). None se não souber."""
+        from .categorias import categoria_pelas_regras
+        descricao = (descricao or "").strip()
+        if not descricao:
+            return None
+        anteriores = [
+            GastoDia.objects.filter(conta__familia=self, descricao__iexact=descricao, categoria__isnull=False)
+            .order_by("-data", "-id").values_list("data", "categoria_id").first(),
+            Lancamento.objects.filter(conta__familia=self, descricao__iexact=descricao, categoria__isnull=False)
+            .order_by("-data", "-id").values_list("data", "categoria_id").first(),
+            CompraCartao.objects.filter(cartao__conta__familia=self, descricao__iexact=descricao,
+                                        categoria__isnull=False)
+            .order_by("-data_compra", "-id").values_list("data_compra", "categoria_id").first(),
+        ]
+        anteriores = [a for a in anteriores if a]
+        if anteriores:
+            return self.categorias.filter(pk=max(anteriores)[1]).first()
+        nome = categoria_pelas_regras(descricao)
+        return self.lista_categorias().filter(nome=nome).first() if nome else None
+
+
+class Categoria(models.Model):
+    """Para onde vai o dinheiro: Mercado, Transporte, Lazer... (da família, valem para todas as contas)."""
+
+    familia = models.ForeignKey(Familia, on_delete=models.CASCADE, related_name="categorias")
+    nome = models.CharField(max_length=40)
+    limite_mensal = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Quanto no máximo gastar por mês nesta categoria (opcional).")
+    ordem = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordem", "nome"]
+        constraints = [models.UniqueConstraint(fields=["familia", "nome"], name="categoria_unica_na_familia")]
+
+    def __str__(self):
+        return self.nome
+
+    CORES = 8
+
+    @property
+    def cor(self):
+        """Índice da cor nos gráficos e marcadores (0 a 7)."""
+        return self.ordem % self.CORES
+
+
+def _campo_categoria():
+    return models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
 
 class Membro(models.Model):
@@ -123,6 +187,9 @@ class Conta(models.Model):
     reserva_modo = models.CharField(max_length=10, choices=MODOS_RESERVA, default=RESERVA_AUTO)
     reserva_minima = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     reserva_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+
+    # "dinheiro liberado" (parcelas e contas que acabaram): liberações até este mês já foram vistas
+    liberado_visto_ate = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return self.nome
@@ -222,6 +289,9 @@ class ContaFixa(models.Model):
     salario = models.BooleanField(
         default=False, help_text="Pagamento do salário; a soma deles é a base do % de gasto.",
     )
+    # só nos pagamentos do salário: o texto da pessoa; o nome é montado a partir dele
+    descricao = models.CharField(max_length=60, blank=True)
+    categoria = _campo_categoria()
     variavel = models.BooleanField(
         default=False,
         help_text="O valor muda todo mês (luz, água, mercado): o valor vira uma estimativa "
@@ -289,6 +359,9 @@ class Lancamento(models.Model):
     descricao = models.CharField(max_length=200)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     tipo = models.CharField(max_length=7, choices=TIPOS, default=SAIDA)
+    categoria = _campo_categoria()
+    id_externo = models.CharField(max_length=80, blank=True, db_index=True,
+                                  help_text="Identificador da transação no extrato importado do banco.")
 
     class Meta:
         ordering = ["-data", "-id"]
@@ -367,6 +440,7 @@ class CompraCartao(models.Model):
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
     parcelas = models.PositiveSmallIntegerField(default=1)
     data_compra = models.DateField()
+    categoria = _campo_categoria()
 
     class Meta:
         ordering = ["-data_compra", "-id"]
@@ -394,6 +468,9 @@ class AssinaturaCartao(models.Model):
     inicio = models.DateField(help_text="Primeira cobrança a partir desta data.")
     fim = models.DateField(null=True, blank=True,
                            help_text="Cancelada a partir desta data: não cobra mais neste dia nem depois.")
+    categoria = _campo_categoria()
+    revisada_em = models.DateField(null=True, blank=True,
+                                   help_text="Última vez que a família confirmou que ainda usa.")
 
     class Meta:
         ordering = ["descricao"]
@@ -458,6 +535,10 @@ class Aporte(models.Model):
     data = models.DateField()
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     descricao = models.CharField(max_length=120, blank=True)
+    objetivo = models.ForeignKey("Objetivo", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="aportes")
+    sobra_de = models.DateField(null=True, blank=True,
+                                help_text="Avulso feito com a sobra de um mês: o 1º dia desse mês.")
 
     class Meta:
         ordering = ["data", "id"]
@@ -468,6 +549,11 @@ class Aporte(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} {self.data:%d/%m/%Y}: {self.valor}"
+
+    @property
+    def nao_guardado(self):
+        """Mês marcado como "não consegui guardar": confirmação com valor zero."""
+        return self.tipo == self.MENSAL and self.valor == 0
 
 
 class GastoDia(models.Model):
@@ -480,6 +566,9 @@ class GastoDia(models.Model):
     data = models.DateField()
     descricao = models.CharField(max_length=120, blank=True)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
+    categoria = _campo_categoria()
+    id_externo = models.CharField(max_length=80, blank=True, db_index=True,
+                                  help_text="Identificador da transação no extrato importado do banco.")
 
     class Meta:
         ordering = ["data", "id"]
@@ -488,3 +577,39 @@ class GastoDia(models.Model):
 
     def __str__(self):
         return f"{self.data:%d/%m} {self.descricao or 'gasto'}: {self.valor}"
+
+
+class Objetivo(models.Model):
+    """Para que se está guardando: reserva de emergência, viagem, carro..."""
+
+    conta = models.ForeignKey(Conta, on_delete=models.CASCADE, related_name="objetivos")
+    nome = models.CharField(max_length=80)
+    valor_alvo = models.DecimalField(max_digits=12, decimal_places=2)
+    prazo = models.DateField(null=True, blank=True, help_text="Até quando quer chegar (opcional).")
+    valor_inicial = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"),
+                                        help_text="Quanto já tinha guardado para isso antes de usar o app.")
+    padrao = models.BooleanField(default=False,
+                                 help_text="Recebe o guardado de cada mês quando nenhum outro objetivo é escolhido.")
+    criado_em = models.DateField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-padrao", "prazo", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def guardado(self):
+        return self.valor_inicial + sum((a.valor for a in self.aportes.all()), Decimal("0"))
+
+    @property
+    def falta(self):
+        return max(self.valor_alvo - self.guardado, Decimal("0"))
+
+    @property
+    def concluido(self):
+        return self.guardado >= self.valor_alvo
+
+    @property
+    def pct(self):
+        return min(100, int(self.guardado * 100 / self.valor_alvo)) if self.valor_alvo > 0 else 0

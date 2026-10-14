@@ -46,6 +46,8 @@
 
     {% with field=form.data_compra %}{% include "financas/_campo.html" %}{% endwith %}
 
+    {% include "financas/_campo_categoria.html" %}
+
     <div class="acoes-form linha-botoes">
       <button class="btn" type="submit">{% if item %}Salvar alterações{% else %}Lançar compra{% endif %}</button>
       <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#cartoes">Cancelar</a>

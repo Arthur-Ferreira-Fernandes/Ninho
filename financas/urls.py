@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import pwa, views
+from . import pwa, views, views_analise
 from .forms import LoginForm
 
 app_name = "financas"
@@ -53,6 +53,20 @@ urlpatterns = [
     path("contas/<int:pk>/fixas/nova/", views.item_novo, {"modelo": "fixa"}, name="fixa_nova"),
     path("contas/<int:pk>/lancamentos/novo/", views.item_novo, {"modelo": "lancamento"}, name="lancamento_novo"),
     path("contas/<int:pk>/conferencias/nova/", views.item_novo, {"modelo": "conferencia"}, name="conferencia_nova"),
+    # antes das rotas genéricas <modelo>/<id>/..., que capturariam estes endereços
+    path("contas/<int:pk>/analise/", views_analise.analise, name="analise"),
+    path("contas/<int:pk>/importar/", views_analise.importar, name="importar"),
+    path("contas/<int:pk>/importar/revisar/", views_analise.importar_revisar, name="importar_revisar"),
+    path("contas/<int:pk>/analise/guardar-sobra/", views_analise.guardar_sobra, name="guardar_sobra"),
+    path("contas/<int:pk>/analise/liberado/", views_analise.liberado_decidir, name="liberado_decidir"),
+    path("contas/<int:pk>/analise/classificar/", views_analise.classificar, name="classificar"),
+    path("assinaturas/<int:assinatura_pk>/revisar/", views_analise.assinatura_revisar, name="assinatura_revisar"),
+    path("contas/<int:pk>/objetivos/novo/", views_analise.objetivo_novo, name="objetivo_novo"),
+    path("objetivos/<int:objetivo_pk>/editar/", views_analise.objetivo_editar, name="objetivo_editar"),
+    path("objetivos/<int:objetivo_pk>/excluir/", views_analise.objetivo_excluir, name="objetivo_excluir"),
+    path("categorias/", views_analise.categorias, name="categorias"),
+    path("categorias/<int:categoria_pk>/editar/", views_analise.categoria_editar, name="categoria_editar"),
+    path("categorias/<int:categoria_pk>/excluir/", views_analise.categoria_excluir, name="categoria_excluir"),
     path("<str:modelo>/<int:item_pk>/editar/", views.item_editar, name="item_editar"),
     path("<str:modelo>/<int:item_pk>/excluir/", views.item_excluir, name="item_excluir"),
     path("conferencias/<int:item_pk>/recomecar/", views.recomecar, name="recomecar"),

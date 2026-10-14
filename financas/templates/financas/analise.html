@@ -1,0 +1,339 @@
+{% extends "financas/base.html" %}{% load dinheiro %}
+{% block titulo %}Análise · {{ conta.nome }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}">← {{ conta.nome }}</a>
+
+<div class="mes-topo analise-topo">
+  <div>
+    <span class="mes-sobretitulo">Análise</span>
+    <h1>Como estão as finanças</h1>
+  </div>
+  <nav class="analise-nav" aria-label="Seções da análise">
+    <a href="#fechamento">Fechamento</a><a href="#categorias">Categorias</a><a href="#poupanca">Poupança</a>
+    <a href="#cartao">Cartão</a><a href="#assinaturas">Assinaturas</a><a href="#liberado">Dinheiro livre</a>
+    {% if sem_categoria %}<a href="#classificar">Classificar <span class="contador">{{ sem_categoria|length }}</span></a>{% endif %}
+  </nav>
+</div>
+
+{# ---------------- Destaques ---------------- #}
+<section id="alertas" class="analise-secao">
+  {% if alertas %}
+  <ul class="destaques">
+    {% for a in alertas %}
+    <li class="destaque {{ a.nivel }}">
+      <span class="destaque-icone" aria-hidden="true">{% if a.nivel == "bom" %}✓{% elif a.nivel == "info" %}i{% else %}!{% endif %}</span>
+      <div><strong>{{ a.titulo }}</strong><p>{{ a.texto }}</p></div>
+      <a class="destaque-link" href="#{{ a.ancora }}">Ver</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="alerta ok">Nada pedindo atenção agora. Continue lançando os gastos e conferindo o saldo para a análise ficar mais precisa.</div>
+  {% endif %}
+</section>
+
+{# ---------------- Fechamento do mês ---------------- #}
+<section id="fechamento" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Fechamento de {{ fechamento.mes|date:"F"|lower }} de {{ fechamento.mes|date:"Y" }}</h2>
+      <p class="rotulo">{% if fechamento.encerrado %}Mês encerrado.{% else %}Mês em andamento: os números incluem o que ainda está previsto.{% endif %}
+        {% if fechamento.comparado_com %}Comparado com a média de {{ fechamento.comparado_com }} {% if fechamento.comparado_com == 1 %}mês anterior{% else %}meses anteriores{% endif %}.{% endif %}</p>
+    </div>
+    <nav class="mes-nav" aria-label="Escolher o mês do fechamento">
+      {% if mes_anterior %}<a class="btn fantasma" href="?mes={{ mes_anterior|date:'Y-m' }}#fechamento" aria-label="Mês anterior">‹</a>{% endif %}
+      {% if mes_seguinte %}<a class="btn fantasma" href="?mes={{ mes_seguinte|date:'Y-m' }}#fechamento" aria-label="Próximo mês">›</a>{% endif %}
+      <a class="btn sec" href="{% url 'financas:mes_detalhes' conta.pk %}?mes={{ fechamento.mes|date:'Y-m' }}">Ver o mês</a>
+    </nav>
+  </div>
+
+  {% if fechamento %}{% with f=fechamento %}
+  <div class="fechamento-grade">
+    <div class="card veredito-card {% if f.sobra < 0 %}negativo{% else %}positivo{% endif %}">
+      <span class="veredito-rotulo">{% if f.sobra < 0 %}Faltou{% else %}Sobrou{% endif %} depois de gastar e guardar</span>
+      <strong class="veredito-valor">{{ f.sobra|abs_valor|brl }}</strong>
+      <p>Entrou {{ f.totais.recebido|brl }}, saiu {{ f.totais.gasto|brl }} em gastos e {{ f.totais.guardado|brl }} foi guardado.</p>
+    </div>
+    <div class="kpis">
+      <div class="card kpi"><span>Dia a dia</span><b>{{ f.dia_a_dia.usado|brl }}</b>
+        <small>de {{ f.dia_a_dia.orcamento|brl }} planejados · {% if f.dia_a_dia.diferenca >= 0 %}<span class="pos">{{ f.dia_a_dia.diferenca|brl }} abaixo</span>{% else %}<span class="neg">{{ f.dia_a_dia.diferenca|abs_valor|brl }} acima</span>{% endif %}</small></div>
+      <div class="card kpi"><span>Guardado</span><b>{{ f.guardar.guardado|brl }}</b>
+        <small>{% if f.guardar.situacao == "confirmado" %}confirmado{% elif f.guardar.situacao == "nao_guardado" %}não deu para guardar{% elif f.guardar.situacao == "previsto" %}previsto, ainda sem confirmar{% else %}sem valor mensal definido{% endif %}{% if f.guardar.previsto %} · meta {{ f.guardar.previsto|brl }}{% endif %}</small></div>
+    </div>
+  </div>
+
+  <div class="contas-layout analise-duas">
+    <div class="card">
+      <h3>O que mudou</h3>
+      {% if not f.comparado_com %}
+        <p class="vazio-texto">Ainda não há meses completos antes deste para comparar. A partir do próximo fechamento, aparece aqui o que subiu e o que caiu em relação à média.</p>
+      {% elif not f.subiram and not f.cairam %}
+        <p class="vazio-texto">Nenhuma categoria mudou muito em relação à média.</p>
+      {% else %}
+      <ul class="mudancas">
+        {% for l in f.subiram %}<li><span class="cat-ponto cor-{{ l.cor }}"></span><span>{{ l.nome }}</span><b class="neg">+{{ l.variacao|brl }}</b><small>{{ l.total|brl }} · média {{ l.media|brl }}</small></li>{% endfor %}
+        {% for l in f.cairam %}<li><span class="cat-ponto cor-{{ l.cor }}"></span><span>{{ l.nome }}</span><b class="pos">−{{ l.variacao|abs_valor|brl }}</b><small>{{ l.total|brl }} · média {{ l.media|brl }}</small></li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    <div class="card">
+      <h3>Para o próximo mês</h3>
+      {% if f.sugestoes %}
+      <ul class="sugestoes-lista">
+        {% for s in f.sugestoes %}
+        <li class="sug-{{ s.tipo }}">{{ s.texto }}
+          {% if s.tipo == "sobra" %}
+          <form method="post" action="{% url 'financas:guardar_sobra' conta.pk %}" class="sobra-form">{% csrf_token %}
+            <input type="hidden" name="mes" value="{{ f.mes|date:'Y-m-d' }}">
+            {% if objetivos %}
+            <select name="objetivo" aria-label="Para qual objetivo">
+              {% for p in objetivos %}<option value="{{ p.objetivo.pk }}"{% if p.objetivo.padrao %} selected{% endif %}>{{ p.objetivo.nome }}</option>{% endfor %}
+            </select>
+            {% endif %}
+            <button type="submit" class="btn">Guardar {{ f.sobra|brl }}</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="vazio-texto">{% if f.ja_guardou_sobra %}A sobra deste mês já foi guardada. {% endif %}Mês dentro do planejado. Continue assim.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endwith %}{% endif %}
+</section>
+
+{# ---------------- Categorias do mês atual ---------------- #}
+<section id="categorias" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Para onde vai o dinheiro em {{ atual|date:"F"|lower }}</h2>
+      <p class="rotulo">Gastos do mês por categoria (inclui o que ainda está previsto; o mês está pela metade, então compare com a média com cuidado).
+        {% if meses_media %}A marca fina mostra a média dos últimos {{ meses_media }} {% if meses_media == 1 %}mês{% else %}meses{% endif %}{% endif %}{% if meses_media %}; o tracejado, o limite.{% else %}O tracejado mostra o limite, quando houver.{% endif %}</p>
+    </div>
+    <a class="btn sec" href="{% url 'financas:categorias' %}">Categorias e limites</a>
+  </div>
+  <div class="card">
+    {% if categorias_atual.linhas %}
+    <div class="cat-barras">
+      {% for l in categorias_atual.linhas %}
+      <details class="cat-barra">
+        <summary>
+          <span class="cb-nome"><span class="cat-ponto cor-{{ l.cor }}"></span>{{ l.nome }}</span>
+          <span class="cb-trilho">
+            <i class="cor-{{ l.cor }}" style="width: {{ l.largura|stringformat:'.2f' }}%"></i>
+            {% if l.largura_media %}<span class="cb-media" style="left: {{ l.largura_media|stringformat:'.2f' }}%" title="Média: {{ l.media|brl }}"></span>{% endif %}
+            {% if l.largura_limite %}<span class="cb-limite" style="left: {{ l.largura_limite|stringformat:'.2f' }}%" title="Limite: {{ l.limite|brl }}"></span>{% endif %}
+          </span>
+          <span class="cb-valor"><b>{{ l.total|brl }}</b>
+            {% if l.pct_limite is not None %}<small class="{% if l.pct_limite >= 100 %}neg{% elif l.pct_limite >= 80 %}aviso{% endif %}">{{ l.pct_limite }}% do limite</small>
+            {% elif l.variacao_pct is not None %}<small class="{% if l.variacao_pct > 15 %}neg{% elif l.variacao_pct < -15 %}pos{% endif %}">{% if l.variacao_pct > 0 %}+{% endif %}{{ l.variacao_pct }}% da média</small>
+            {% elif l.media %}<small>média {{ l.media|brl }}</small>
+            {% else %}<small>{{ l.pct }}% do mês</small>{% endif %}</span>
+        </summary>
+        <ul class="cb-itens">
+          {% for i in l.itens|slice:":12" %}<li><span>{{ i.data|date:"d/m" }}</span><span>{{ i.nome }}{% if i.previsto %} <small class="rotulo">≈ previsto</small>{% endif %}</span><b>{{ i.valor|brl }}</b></li>{% endfor %}
+          {% if l.itens|length > 12 %}<li class="rotulo">e mais {{ l.itens|length|add:"-12" }} ite{{ l.itens|length|add:"-12"|pluralize:"m,ns" }}</li>{% endif %}
+          {% if not l.itens %}<li class="rotulo">Nada neste mês (a média vem dos meses anteriores).</li>{% endif %}
+        </ul>
+      </details>
+      {% endfor %}
+    </div>
+    <p class="nota-lista rotulo">Total do mês: <b>{{ categorias_atual.total|brl }}</b>. “Dia a dia sem detalhar” é o dinheiro do dia sem gastos lançados: lançar os gastos do dia mostra para onde ele vai.</p>
+    {% else %}
+    <p class="vazio-texto">Nenhum gasto neste mês ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="card" id="ritmo">
+    <h3>Ritmo do dia a dia</h3>
+    {% if ritmo %}
+      <p>Até hoje: <b>{{ ritmo.usado|brl }}</b> de {{ ritmo.total|brl }} do mês, uma média de <b>{{ ritmo.por_dia|brl }}</b> por dia (planejado: {{ ritmo.planejado_dia|brl }}).</p>
+      {% if ritmo.acaba_em %}<p class="neg">Nesse ritmo, o dinheiro do dia a dia acaba por volta de <b>{{ ritmo.acaba_em|date:"d/m" }}</b>. Para fechar no planejado, o resto do mês precisa ficar abaixo do disponível de cada dia.</p>
+      {% elif ritmo.sobra > 0 %}<p class="pos">Nesse ritmo, sobram cerca de <b>{{ ritmo.sobra|brl }}</b> no fim do mês.</p>
+      {% else %}<p>Nesse ritmo, o mês fecha perto do planejado.</p>{% endif %}
+    {% else %}
+      <p class="vazio-texto">Para medir o ritmo, informe no extrato diário o que usou de fato em cada dia (os gastos ou “não usei”). Dias sem informação contam como “usou tudo”.</p>
+    {% endif %}
+  </div>
+</section>
+
+{# ---------------- Poupança ---------------- #}
+<section id="poupanca" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Quanto você guarda</h2>
+      <p class="rotulo">A taxa de poupança é o guardado (do mês e avulsos) dividido pelo que entrou.</p>
+    </div>
+    <a class="btn sec" href="{% url 'financas:painel' conta.pk %}#investimentos">Investimentos</a>
+  </div>
+  <div class="kpis poupanca-kpis">
+    <div class="card kpi kpi-invest"><span>Média dos últimos meses</span>
+      <b>{% if poupanca.media is not None %}{{ poupanca.media }}%{% else %}—{% endif %}</b>
+      <small>{% if poupanca.media is not None %}{{ poupanca.meses_media }} {% if poupanca.meses_media == 1 %}mês fechado{% else %}meses fechados{% endif %}{% else %}aparece depois do primeiro mês fechado e confirmado{% endif %}</small></div>
+    <div class="card kpi kpi-invest"><span>Sequência</span>
+      <b>{{ poupanca.sequencia }} {% if poupanca.sequencia == 1 %}mês{% else %}meses{% endif %}</b>
+      <small>{% if poupanca.sequencia %}seguidos guardando. Não quebre a corrente!{% else %}confirme o guardado de cada mês em Investimentos{% endif %}</small></div>
+  </div>
+  <div class="card">
+    <div class="colunas-taxa" role="img" aria-label="Taxa de poupança por mês">
+      {% for l in poupanca.linhas %}
+      <div class="col-taxa{% if l.atual %} atual{% endif %} sit-{{ l.situacao }}" title="{{ l.mes|date:'F/Y'|capfirst }}: {{ l.guardado|brl }} de {{ l.recebido|brl }}">
+        <span class="ct-valor">{% if l.taxa is not None %}{{ l.taxa|floatformat:"0" }}%{% else %}—{% endif %}</span>
+        <span class="ct-barra"><i style="height: {{ l.altura|stringformat:'.1f' }}%"></i></span>
+        <span class="ct-mes">{{ l.mes|date:"M"|lower }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="nota-lista rotulo">Mais claro: mês com guardado ainda previsto (sem confirmação). {% if poupanca.linhas|length < 3 %}O gráfico ganha corpo conforme os meses passam.{% endif %}</p>
+  </div>
+
+  <div class="card" id="objetivos">
+    <div class="topo">
+      <h3 style="margin:0">Objetivos</h3>
+      <a class="btn" href="{% url 'financas:objetivo_novo' conta.pk %}">+ Novo objetivo</a>
+    </div>
+    {% include "financas/_objetivos.html" %}
+  </div>
+</section>
+
+{# ---------------- Cartão ---------------- #}
+<section id="cartao" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Salário já comprometido no cartão</h2>
+      <p class="rotulo">Parcelas de compras que vencem nos próximos meses (sem assinaturas), em % do salário de cada mês.</p>
+    </div>
+  </div>
+  <div class="card">
+    {% if cartao.restante %}
+    <div class="barras-grupos">
+      {% for l in cartao.linhas %}
+      <div class="barra-grupo">
+        <span class="bg-nome">{{ l.mes|date:"F/Y"|capfirst }}</span>
+        <span class="bg-trilho"><i class="seg-gasto" style="width: {{ l.largura|stringformat:'.2f' }}%"></i></span>
+        <span class="bg-valor"><b>{% if l.pct is not None %}{{ l.pct }}%{% else %}—{% endif %}</b> {{ l.valor|brl }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="nota-lista rotulo">Total a pagar em parcelas: <b>{{ cartao.restante|brl }}</b>. Acima de 30% do salário em parcelas, sobra pouca margem para imprevistos.</p>
+    {% else %}
+    <p class="vazio-texto">Nenhuma parcela a pagar. Ótimo: o salário dos próximos meses está livre.</p>
+    {% endif %}
+  </div>
+</section>
+
+{# ---------------- Assinaturas ---------------- #}
+<section id="assinaturas" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Assinaturas em um ano</h2>
+      <p class="rotulo">Olhar o valor anual ajuda a decidir o que vale a pena manter.</p>
+    </div>
+  </div>
+  <div class="card">
+    {% if assinaturas.lista %}
+    <div class="tabela-rolagem-x">
+    <table class="lista assinaturas-ano">
+      <thead><tr><th>Assinatura</th><th class="num">Por mês</th><th class="num">Por ano</th><th></th></tr></thead>
+      <tbody>
+      {% for x in assinaturas.lista %}
+      <tr{% if x.revisar %} class="revisar"{% endif %}>
+        <td><strong>{{ x.assinatura.descricao }}</strong>{% if x.assinatura.categoria %} <small class="cat-chip">{{ x.assinatura.categoria.nome }}</small>{% endif %}
+          {% if x.revisar %}<small class="rotulo bloco">sem revisão desde {{ x.desde|date:"m/Y" }}</small>{% endif %}</td>
+        <td class="num">{{ x.assinatura.valor|brl }}</td>
+        <td class="num"><b>{{ x.anual|brl }}</b></td>
+        <td class="num">{% if x.revisar %}<div class="acoes-revisar">
+          <form method="post" action="{% url 'financas:assinatura_revisar' x.assinatura.pk %}">{% csrf_token %}<button type="submit" class="btn sec">Ainda uso</button></form>
+          <form method="post" action="{% url 'financas:assinatura_encerrar' x.assinatura.pk %}" onsubmit="return confirm('Cancelar {{ x.assinatura.descricao|escapejs }} a partir de hoje?')">{% csrf_token %}
+            <input type="hidden" name="fim" value="{{ hoje|date:'Y-m-d' }}"><button type="submit" class="btn fantasma perigo-texto">Cancelar</button></form>
+        </div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><td>Total</td><td class="num">{{ assinaturas.mensal|brl }}</td><td class="num"><b>{{ assinaturas.anual|brl }}</b></td><td></td></tr></tfoot>
+    </table>
+    </div>
+    <p class="nota-lista rotulo">A cada 6 meses o {{ marca.nome }} pergunta se você ainda usa cada assinatura.</p>
+    {% else %}
+    <p class="vazio-texto">Nenhuma assinatura ativa cadastrada.</p>
+    {% endif %}
+  </div>
+</section>
+
+{# ---------------- Dinheiro liberado ---------------- #}
+<section id="liberado" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Dinheiro que fica livre</h2>
+      <p class="rotulo">Quando uma parcela, conta ou assinatura acaba, o valor volta para o orçamento. É o momento mais fácil de aumentar o que se guarda: você já vivia sem esse dinheiro.</p>
+    </div>
+  </div>
+  <div class="card">
+    {% if liberado.ja %}
+    <h3>Já ficou livre</h3>
+    <ul class="liberado-lista">
+      {% for i in liberado.ja %}<li><span>{{ i.nome }}</span><small class="rotulo">{% if i.origem == "parcelas" %}última parcela paga{% elif i.origem == "assinatura" %}assinatura cancelada{% else %}conta encerrada{% endif %} · desde {{ i.mes|date:"m/Y" }}</small><b class="pos">+{{ i.valor|brl }}/mês</b></li>{% endfor %}
+    </ul>
+    <div class="liberado-acoes">
+      <form method="post" action="{% url 'financas:liberado_decidir' conta.pk %}">{% csrf_token %}
+        <button type="submit" name="acao" value="somar" class="btn">Somar {{ liberado.total_ja|brl }} ao guardado mensal</button>
+        <button type="submit" name="acao" value="ignorar" class="btn sec">Agora não</button>
+      </form>
+      <small class="rotulo">{% if conta.guardar_modo == "percentual" %}Seu guardado é em % do salário: para somar, ajuste a porcentagem em Configurar.{% else %}Hoje você guarda {{ conta.guardar_mensal|brl }} por mês.{% endif %}</small>
+    </div>
+    {% endif %}
+    {% if liberado.em_breve %}
+    <h3>Em breve</h3>
+    <ul class="liberado-lista">
+      {% for i in liberado.em_breve %}<li><span>{{ i.nome }}</span><small class="rotulo">a partir de {{ i.mes|date:"F/Y"|lower }}</small><b>+{{ i.valor|brl }}/mês</b></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if not liberado.ja and not liberado.em_breve %}
+    <p class="vazio-texto">Nenhuma parcela, conta ou assinatura terminando nos próximos meses.</p>
+    {% endif %}
+  </div>
+</section>
+
+{# ---------------- Saldo real × esperado ---------------- #}
+{% if vazamento %}
+<section class="analise-secao">
+  <div class="card">
+    <h3>Saldo real × esperado</h3>
+    <p>Na última conferência ({{ vazamento.conferencia.data|date:"d/m/Y" }}), o banco mostrava {{ vazamento.conferencia.saldo_real|brl }},
+      {% if vazamento.diferenca < 0 %}<b class="neg">{{ vazamento.diferenca|abs_valor|brl }} abaixo</b>{% else %}<b class="pos">{{ vazamento.diferenca|brl }} acima</b>{% endif %} do esperado
+      (≈ {{ vazamento.por_mes|abs_valor|brl }} por mês desde o início do cálculo).</p>
+    {% if vazamento.relevante %}<p class="rotulo">Diferença negativa e constante costuma ser gasto que não foi lançado: pix, débito, saques, tarifas. Lançar esses gastos ou conferir com mais frequência ajuda a achar o vazamento.</p>{% endif %}
+  </div>
+</section>
+{% endif %}
+
+{# ---------------- Classificar ---------------- #}
+{% if sem_categoria %}
+<section id="classificar" class="analise-secao">
+  <div class="secao-cab">
+    <div>
+      <h2>Classificar gastos</h2>
+      <p class="rotulo">O que saiu nos últimos 90 dias (e contas e assinaturas ativas) sem categoria, agrupado pela descrição. A categoria escolhida vale para todos os itens do grupo e para os próximos com a mesma descrição.</p>
+    </div>
+  </div>
+  <form method="post" action="{% url 'financas:classificar' conta.pk %}" class="card">{% csrf_token %}
+    <ul class="classificar-lista">
+      {% for g in sem_categoria %}
+      <li>
+        <span class="rotulo">{% if g.data %}{{ g.data|date:"d/m" }}{% else %}todo mês{% endif %}</span>
+        <span>{{ g.descricao }} <small class="rotulo">{% if g.quantidade > 1 %}{{ g.quantidade }} vezes{% elif g.tipo == "gasto" %}gasto do dia{% elif g.tipo == "lancamento" %}lançamento{% elif g.tipo == "compra" %}cartão{% elif g.tipo == "assinatura" %}assinatura{% else %}conta fixa{% endif %}</small></span>
+        <b>{{ g.total|brl }}</b>
+        <select name="item-{{ g.tipo }}-{{ g.item.pk }}" aria-label="Categoria de {{ g.descricao }}">
+          <option value="">Escolher…</option>
+          {% for c in lista_categorias %}<option value="{{ c.pk }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </li>
+      {% endfor %}
+    </ul>
+    <button type="submit" class="btn">Salvar categorias</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

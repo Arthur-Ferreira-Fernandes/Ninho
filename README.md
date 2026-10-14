@@ -3,6 +3,20 @@
 Controle das finanças da família: saldo esperado x real, dinheiro do dia a dia, contas fixas, cartões e investimentos.
 Cada família tem seu espaço (multi-tenant), e as pessoas entram por convite.
 
+## O que ajuda a controlar e guardar
+
+- **Categorias** (`/categorias/`): gastos do dia, compras no cartão, assinaturas, contas fixas e saídas avulsas têm
+  categoria. Sem escolher, o app sugere pela descrição (a última usada com a mesma descrição, senão palavras-chave
+  de `financas/categorias.py`). Cada categoria pode ter um limite mensal.
+- **Análise** (botão no topo do painel): fechamento do mês com o que subiu e caiu em relação à média, gastos por
+  categoria, ritmo do dia a dia, taxa de poupança mês a mês e sequência de meses guardando, salário comprometido em
+  parcelas, assinaturas em valor anual (com revisão a cada 6 meses), dinheiro que fica livre quando parcelas e contas
+  acabam e itens sem categoria para classificar. Os três destaques mais importantes aparecem no topo do painel.
+- **Objetivos** (aba Investimentos): para que se está guardando, com progresso, ritmo e quando chega. O guardado do
+  mês vai para o objetivo marcado como padrão; avulsos e a sobra do mês podem ir para qualquer um.
+- **Importar extrato** (OFX ou CSV do banco): cada transação é comparada com o planejamento (salário, contas fixas,
+  fatura, guardado do mês) para não contar duas vezes; o que já foi importado é reconhecido pelo identificador.
+
 ## Publicar na internet
 
 O app roda a partir do `Dockerfile` em qualquer serviço que aceite Docker e ofereça PostgreSQL.
@@ -117,3 +131,14 @@ desktop/build.sh          # cria dist/ninho e o atalho "Ninho" no menu de aplica
 
 Os dados ficam em `~/.local/share/ninho` (banco `db.sqlite3` e a chave secreta), separados do executável:
 gerar uma versão nova não apaga nada. Fechar a janela do terminal encerra o programa.
+
+**Backup automático:** ao abrir (antes das migrações) e uma vez por dia enquanto está aberto, o programa copia o banco
+para `~/.local/share/ninho/backups/ninho-AAAA-MM-DD.sqlite3`, guardando as 30 cópias mais recentes. Para ter também
+uma cópia fora do computador, escreva o caminho de uma pasta sincronizada (Google Drive, Dropbox...) no arquivo
+`~/.local/share/ninho/pasta_backup_extra`:
+
+```sh
+echo "$HOME/Dropbox/ninho" > ~/.local/share/ninho/pasta_backup_extra
+```
+
+Para restaurar: feche o programa e copie a cópia escolhida por cima de `~/.local/share/ninho/db.sqlite3`.

@@ -33,7 +33,7 @@
 
     <fieldset class="secao" id="secao-salario">
       <legend>Sua renda</legend>
-      <p class="ajuda-secao">Informe em que dias do mês o salário cai e quanto em cada um (ex.: adiantamento no dia 15 e o restante no dia 30). Cada pagamento entra como receita fixa. Para um <b>aumento ou redução previstos</b>, use o ícone de calendário: deixe o valor atual valendo <b>até</b> o último mês e adicione outro pagamento valendo <b>a partir de</b> quando o novo começa.</p>
+      <p class="ajuda-secao">Informe em que dias do mês o salário cai e quanto em cada um (ex.: adiantamento no dia 15 e o restante no dia 30). Cada pagamento entra como receita fixa, e você pode dar uma <b>descrição</b> a cada um (ex.: o salário de cada pessoa da família). Para um <b>aumento ou redução previstos</b>, use o ícone de calendário: deixe o valor atual valendo <b>até</b> o último mês e adicione outro pagamento valendo <b>a partir de</b> quando o novo começa.</p>
 
       {{ pagamentos.management_form }}
       {% for erro in pagamentos.non_form_errors %}<div class="alerta erro">{{ erro }}</div>{% endfor %}

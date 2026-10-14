@@ -7,7 +7,8 @@ from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, Us
 from django.contrib.auth.models import User
 
 from .templatetags.dinheiro import brl
-from .models import Aporte, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, UsoDiario
+from .models import (Aporte, Categoria, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta,
+                     ContaFixa, Familia, Lancamento, Objetivo, UsoDiario)
 
 DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
@@ -15,6 +16,26 @@ DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 def _dinheiro(placeholder="0,00"):
     return forms.NumberInput(attrs={"step": "0.01", "min": "0", "inputmode": "decimal",
                                     "placeholder": placeholder})
+
+
+class ComCategoria:
+    """Campo "categoria" opcional: vazio, a categoria é sugerida pela descrição ao salvar."""
+
+    campo_descricao = "descricao"
+
+    def _preparar_categoria(self, familia):
+        self.familia = familia
+        campo = self.fields["categoria"]
+        campo.required = False
+        campo.label = "Categoria"
+        campo.empty_label = "Automática (pela descrição)"
+        campo.help_text = ""
+        campo.queryset = familia.lista_categorias() if familia else Categoria.objects.none()
+
+    def _completar_categoria(self, item):
+        if item.categoria_id is None and getattr(self, "familia", None):
+            item.categoria = self.familia.sugerir_categoria(getattr(item, self.campo_descricao))
+        return item
 
 
 class ContaForm(forms.ModelForm):
@@ -122,16 +143,19 @@ class ContaForm(forms.ModelForm):
 
 
 class PagamentoSalarioForm(forms.ModelForm):
-    """Um pagamento do salário: o dia do mês em que cai e quanto cai."""
+    """Um pagamento do salário: o dia do mês em que cai, quanto cai e de quem/o que é."""
 
     class Meta:
         model = ContaFixa
-        fields = ["dia", "valor", "vigente_desde", "vigente_ate"]
-        labels = {"dia": "Dia", "valor": "Valor", "vigente_desde": "A partir de", "vigente_ate": "Até"}
+        fields = ["dia", "valor", "descricao", "vigente_desde", "vigente_ate"]
+        labels = {"dia": "Dia", "valor": "Valor", "descricao": "Descrição",
+                  "vigente_desde": "A partir de", "vigente_ate": "Até"}
         help_texts = {"dia": "", "vigente_desde": "", "vigente_ate": ""}
         widgets = {
             "dia": forms.NumberInput(attrs={"min": "1", "max": "31", "inputmode": "numeric", "placeholder": "Dia"}),
             "valor": _dinheiro(),
+            "descricao": forms.TextInput(attrs={"placeholder": "Descrição (opcional): ex.: Salário da Ana, Adiantamento",
+                                                "autocomplete": "off", "maxlength": "60"}),
             "vigente_desde": DATA,
             "vigente_ate": DATA,
         }
@@ -194,12 +218,13 @@ class BasePagamentosSalario(forms.BaseInlineFormSet):
 
 
 def _nome_do_pagamento(p, quantidade):
+    """Nome exibido: a descrição (ou "Salário") mais o dia e o período quando ajudam a distinguir."""
     detalhes = [] if quantidade == 1 else [f"dia {p.dia}"]
     if p.vigente_desde:
         detalhes.append(f"a partir de {p.vigente_desde:%m/%Y}")
     if p.vigente_ate:
         detalhes.append(f"até {p.vigente_ate:%m/%Y}")
-    return "Salário" + (f" ({', '.join(detalhes)})" if detalhes else "")
+    return (p.descricao or "Salário") + (f" ({', '.join(detalhes)})" if detalhes else "")
 
 
 PagamentosSalarioFormSet = forms.inlineformset_factory(
@@ -208,7 +233,9 @@ PagamentosSalarioFormSet = forms.inlineformset_factory(
 )
 
 
-class ContaFixaForm(forms.ModelForm):
+class ContaFixaForm(ComCategoria, forms.ModelForm):
+    campo_descricao = "nome"
+
     dia = forms.TypedChoiceField(
         label="Dia do mês", coerce=int, choices=[(d, d) for d in range(1, 32)], required=False,
         widget=forms.RadioSelect, empty_value=None,
@@ -218,7 +245,7 @@ class ContaFixaForm(forms.ModelForm):
     class Meta:
         model = ContaFixa
         fields = ["tipo", "nome", "variavel", "valor", "frequencia", "dia", "intervalo_dias", "proxima",
-                  "vigente_desde", "vigente_ate", "ativa"]
+                  "vigente_desde", "vigente_ate", "ativa", "categoria"]
         labels = {"tipo": "Tipo", "nome": "Descrição", "valor": "Valor", "ativa": "Ativa",
                   "variavel": "O valor muda todo mês", "frequencia": "Com que frequência",
                   "intervalo_dias": "A cada quantos dias", "proxima": "Próxima vez",
@@ -238,8 +265,9 @@ class ContaFixaForm(forms.ModelForm):
             "vigente_ate": DATA,
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, familia=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self._preparar_categoria(familia)
         self.fields["vigente_desde"].help_text = ""
         self.fields["vigente_ate"].label = "Último dia em que vale"
         self.fields["vigente_ate"].help_text = "Ex.: o aluguel termina quando você se mudar. Os meses anteriores continuam valendo."
@@ -247,7 +275,13 @@ class ContaFixaForm(forms.ModelForm):
         if not self.instance.pk:
             del self.fields["ativa"]  # novas já nascem ativas
         if self.instance.salario:
+            # o campo "Descrição" edita a descrição; o nome é montado ao salvar (como em Configurar conta)
+            self.fields["nome"].required = False
+            self.fields["nome"].max_length = 60
+            self.fields["nome"].widget.attrs.update(maxlength="60", placeholder="Ex.: Salário da Ana, Adiantamento")
+            self.initial["nome"] = self.instance.descricao
             del self.fields["tipo"]        # pagamento de salário é sempre receita
+            del self.fields["categoria"]   # e receita não tem categoria
             del self.fields["variavel"]    # e tem valor definido na configuração da conta
             del self.fields["frequencia"]  # e cai todo mês
             del self.fields["intervalo_dias"]
@@ -287,11 +321,24 @@ class ContaFixaForm(forms.ModelForm):
             raise forms.ValidationError("Informe um valor maior que zero.")
         return valor
 
+    def save(self, commit=True):
+        item = super().save(commit=False)
+        if item.salario:
+            item.descricao = self.cleaned_data.get("nome") or ""
+            item.nome = _nome_do_pagamento(item, item.conta.fixas.filter(salario=True).count())
+        if item.tipo == ContaFixa.RECEITA:
+            item.categoria = None
+        else:
+            self._completar_categoria(item)
+        if commit:
+            item.save()
+        return item
 
-class LancamentoForm(forms.ModelForm):
+
+class LancamentoForm(ComCategoria, forms.ModelForm):
     class Meta:
         model = Lancamento
-        fields = ["tipo", "descricao", "valor", "data"]
+        fields = ["tipo", "descricao", "valor", "data", "categoria"]
         labels = {"tipo": "Tipo", "descricao": "Descrição", "valor": "Valor", "data": "Data"}
         widgets = {
             "tipo": forms.RadioSelect,
@@ -300,11 +347,25 @@ class LancamentoForm(forms.ModelForm):
             "data": DATA,
         }
 
+    def __init__(self, *args, familia=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._preparar_categoria(familia)
+
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
         if valor <= 0:
             raise forms.ValidationError("Informe um valor maior que zero.")
         return valor
+
+    def save(self, commit=True):
+        item = super().save(commit=False)
+        if item.tipo == Lancamento.ENTRADA:
+            item.categoria = None     # categorias são para o que sai
+        else:
+            self._completar_categoria(item)
+        if commit:
+            item.save()
+        return item
 
 
 class ConferenciaForm(forms.ModelForm):
@@ -485,7 +546,7 @@ class CartaoForm(forms.ModelForm):
         widgets = {"nome": forms.TextInput(attrs={"placeholder": "Ex.: Nubank, Itaú Visa", "autofocus": True})}
 
 
-class CompraCartaoForm(forms.ModelForm):
+class CompraCartaoForm(ComCategoria, forms.ModelForm):
     parcelas = forms.IntegerField(
         label="Parcelas", min_value=1, max_value=48, initial=1,
         widget=forms.NumberInput(attrs={"min": "1", "max": "48", "inputmode": "numeric"}),
@@ -494,7 +555,7 @@ class CompraCartaoForm(forms.ModelForm):
 
     class Meta:
         model = CompraCartao
-        fields = ["cartao", "descricao", "valor_total", "parcelas", "data_compra"]
+        fields = ["cartao", "descricao", "valor_total", "parcelas", "data_compra", "categoria"]
         labels = {"cartao": "Cartão", "descricao": "Descrição", "valor_total": "Valor total da compra",
                   "data_compra": "Data da compra"}
         widgets = {
@@ -509,6 +570,7 @@ class CompraCartaoForm(forms.ModelForm):
         self.fields["cartao"].queryset = conta.cartoes.all()
         self.fields["cartao"].empty_label = None
         self.fields["cartao"].error_messages["required"] = "Escolha o cartão."
+        self._preparar_categoria(conta.familia)
 
     def clean_valor_total(self):
         valor = self.cleaned_data["valor_total"]
@@ -516,13 +578,19 @@ class CompraCartaoForm(forms.ModelForm):
             raise forms.ValidationError("Informe um valor maior que zero.")
         return valor
 
+    def save(self, commit=True):
+        item = self._completar_categoria(super().save(commit=False))
+        if commit:
+            item.save()
+        return item
 
-class AssinaturaForm(forms.ModelForm):
+
+class AssinaturaForm(ComCategoria, forms.ModelForm):
     dia_cobranca = _dia_do_mes("Dia da cobrança")
 
     class Meta:
         model = AssinaturaCartao
-        fields = ["cartao", "descricao", "valor", "dia_cobranca", "inicio", "fim"]
+        fields = ["cartao", "descricao", "valor", "dia_cobranca", "inicio", "fim", "categoria"]
         labels = {"cartao": "Cartão", "descricao": "Assinatura", "valor": "Valor mensal",
                   "inicio": "Cobra a partir de", "fim": "Cancelada a partir de"}
         help_texts = {"fim": "Deixe vazio enquanto a assinatura estiver ativa.", "inicio": ""}
@@ -539,6 +607,7 @@ class AssinaturaForm(forms.ModelForm):
         self.fields["cartao"].queryset = conta.cartoes.all()
         self.fields["cartao"].empty_label = None
         self.fields["cartao"].error_messages["required"] = "Escolha o cartão."
+        self._preparar_categoria(conta.familia)
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
@@ -552,6 +621,12 @@ class AssinaturaForm(forms.ModelForm):
         if inicio and fim and fim < inicio:
             self.add_error("fim", "O cancelamento não pode ser antes do início.")
         return dados
+
+    def save(self, commit=True):
+        item = self._completar_categoria(super().save(commit=False))
+        if commit:
+            item.save()
+        return item
 
 
 class PagamentoContaForm(forms.ModelForm):
@@ -571,12 +646,23 @@ class AporteForm(forms.ModelForm):
 
     class Meta:
         model = Aporte
-        fields = ["data", "valor", "descricao"]
+        fields = ["data", "valor", "descricao", "objetivo"]
 
     def __init__(self, *args, conta, hoje, **kwargs):
         self.conta, self.hoje = conta, hoje
         super().__init__(*args, **kwargs)
         self.fields["descricao"].required = False
+        self.fields["objetivo"].queryset = conta.objetivos.all()
+
+    def save(self, commit=True):
+        aporte = super().save(commit=False)
+        if aporte.objetivo_id is None and aporte.valor > 0 and "objetivo" not in self.data:
+            # sem o campo no formulário: vai para o objetivo que recebe o guardado do mês, se houver
+            # ("Sem objetivo" escolhido envia o campo vazio e é respeitado)
+            aporte.objetivo = self.conta.objetivos.filter(padrao=True).first()
+        if commit:
+            aporte.save()
+        return aporte
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
@@ -599,15 +685,22 @@ class AporteForm(forms.ModelForm):
         return data
 
 
-class GastoDiaForm(forms.ModelForm):
+class GastoDiaForm(ComCategoria, forms.ModelForm):
     class Meta:
         model = GastoDia
-        fields = ["data", "descricao", "valor"]
+        fields = ["data", "descricao", "valor", "categoria"]
 
     def __init__(self, *args, conta, hoje, **kwargs):
         self.conta, self.hoje = conta, hoje
         super().__init__(*args, **kwargs)
         self.fields["descricao"].required = False
+        self._preparar_categoria(conta.familia)
+
+    def save(self, commit=True):
+        item = self._completar_categoria(super().save(commit=False))
+        if commit:
+            item.save()
+        return item
 
     def clean_valor(self):
         valor = self.cleaned_data["valor"]
@@ -622,3 +715,67 @@ class GastoDiaForm(forms.ModelForm):
         if data > self.hoje:
             raise forms.ValidationError("Só dá para lançar gastos de hoje ou de dias passados.")
         return data
+
+
+class CategoriaForm(forms.ModelForm):
+    class Meta:
+        model = Categoria
+        fields = ["nome", "limite_mensal"]
+        labels = {"nome": "Nome", "limite_mensal": "Limite por mês"}
+        widgets = {
+            "nome": forms.TextInput(attrs={"placeholder": "Ex.: Farmácia, Filhos, Carro", "autocomplete": "off",
+                                           "maxlength": "40"}),
+            "limite_mensal": _dinheiro("sem limite"),
+        }
+
+    def __init__(self, *args, familia, **kwargs):
+        self.familia = familia
+        super().__init__(*args, **kwargs)
+        self.fields["limite_mensal"].help_text = ""
+
+    def clean_nome(self):
+        nome = " ".join(self.cleaned_data["nome"].split())
+        repetida = self.familia.categorias.filter(nome__iexact=nome).exclude(pk=self.instance.pk)
+        if repetida.exists():
+            raise forms.ValidationError("Já existe uma categoria com esse nome.")
+        return nome
+
+    def clean_limite_mensal(self):
+        limite = self.cleaned_data["limite_mensal"]
+        if limite is not None and limite <= 0:
+            return None   # zero ou negativo = sem limite
+        return limite
+
+
+class ObjetivoForm(forms.ModelForm):
+    class Meta:
+        model = Objetivo
+        fields = ["nome", "valor_alvo", "prazo", "valor_inicial", "padrao"]
+        labels = {"nome": "Para quê", "valor_alvo": "Quanto quer juntar", "prazo": "Até quando",
+                  "valor_inicial": "Quanto já tem guardado para isso", "padrao": "Recebe o guardado de todo mês"}
+        help_texts = {"prazo": "Com prazo, o app mostra quanto guardar por mês para chegar a tempo.",
+                      "valor_inicial": "Dinheiro que já estava guardado antes de usar o app.",
+                      "padrao": "Ao confirmar o guardado do mês sem escolher outro objetivo, o valor vai para este."}
+        widgets = {
+            "nome": forms.TextInput(attrs={"placeholder": "Ex.: Reserva de emergência, Viagem, Carro novo",
+                                           "autocomplete": "off"}),
+            "valor_alvo": _dinheiro(),
+            "prazo": DATA,
+            "valor_inicial": _dinheiro(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["valor_inicial"].required = False   # vazio = nada guardado ainda
+
+    def clean_valor_alvo(self):
+        valor = self.cleaned_data["valor_alvo"]
+        if valor <= 0:
+            raise forms.ValidationError("Informe um valor maior que zero.")
+        return valor
+
+    def clean_valor_inicial(self):
+        valor = self.cleaned_data["valor_inicial"] or Decimal("0")
+        if valor < 0:
+            raise forms.ValidationError("O valor não pode ser negativo.")
+        return valor

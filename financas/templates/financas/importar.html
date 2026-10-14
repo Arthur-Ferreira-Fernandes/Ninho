@@ -1,0 +1,37 @@
+{% extends "financas/base.html" %}
+{% block titulo %}Importar extrato · {{ conta.nome }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}">← {{ conta.nome }}</a>
+
+<div class="pagina-estreita">
+  <h1>Importar extrato</h1>
+  <p class="sub">Traga as transações da conta direto do arquivo do banco, sem digitar. Antes de importar, você revisa cada uma: o que já está no planejamento (salário, contas fixas, fatura do cartão) é reconhecido e não conta duas vezes.</p>
+
+  <form method="post" enctype="multipart/form-data" class="card importar-card">{% csrf_token %}
+    {% if erro %}<div class="alerta erro">{{ erro }}</div>{% endif %}
+    <label class="arquivo-area" for="arquivo">
+      <span class="arquivo-icone" aria-hidden="true">⇪</span>
+      <strong>Escolha o arquivo do extrato</strong>
+      <small>OFX (recomendado) ou CSV, até 2 MB</small>
+      <input type="file" name="arquivo" id="arquivo" accept=".ofx,.qfx,.csv,.txt" required>
+      <span class="arquivo-nome" id="arquivo-nome"></span>
+    </label>
+    <button type="submit" class="btn">Ler o arquivo</button>
+  </form>
+
+  <div class="card">
+    <h2>Como baixar o extrato</h2>
+    <ul class="dicas-banco">
+      <li><b>No internet banking ou no app do banco</b>, procure por “Extrato”, escolha o período e use “Exportar”, “Baixar” ou “Salvar como” no formato <b>OFX</b> (às vezes chamado de “Money” ou “Quicken”). Se não houver OFX, use <b>CSV</b>.</li>
+      <li><b>Só no celular?</b> Muitos bancos enviam o extrato por e-mail ou pelo botão de compartilhar do app. Salve o arquivo e abra esta página no computador, ou envie direto do celular.</li>
+      <li><b>Período:</b> o ideal é o mês anterior inteiro, ou desde a última importação. Transações já importadas são reconhecidas e ignoradas.</li>
+      <li><b>Fatura do cartão:</b> não importe aqui. As compras do cartão entram em “+ Compra no cartão”; o pagamento da fatura no extrato é reconhecido.</li>
+    </ul>
+  </div>
+</div>
+<script>
+document.getElementById("arquivo").addEventListener("change", (e) => {
+  document.getElementById("arquivo-nome").textContent = e.target.files[0] ? e.target.files[0].name : "";
+});
+</script>
+{% endblock %}

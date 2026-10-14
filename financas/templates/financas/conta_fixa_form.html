@@ -31,6 +31,7 @@
 
     {% with field=form.nome %}{% include "financas/_campo.html" %}{% endwith %}
     <div class="atalhos sugestoes" id="sugestoes" aria-label="Sugestões"></div>
+    {% include "financas/_campo_categoria.html" with esconder_com="receita" %}
 
     {% if form.variavel %}
     <label class="interruptor">
