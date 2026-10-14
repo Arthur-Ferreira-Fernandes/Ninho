@@ -59,6 +59,15 @@
         <div><dt>Membro desde</dt><dd>{{ user.date_joined|date:"d/m/Y" }}</dd></div>
       </dl>
     </div>
+    <div class="card app-card">
+      <h2 style="margin:0;font-size:1rem">Usar como app</h2>
+      <p class="rotulo" style="margin:6px 0 0">Coloque o {{ marca.nome }} na tela inicial do celular e abra como um aplicativo.</p>
+      <button type="button" class="btn bloco" data-instalar hidden onclick="instalarApp()" style="margin-top:10px">Instalar app</button>
+      <h3>iPhone (Safari)</h3>
+      <ol><li>Toque em <b>Compartilhar</b>.</li><li>Escolha <b>Adicionar à Tela de Início</b>.</li></ol>
+      <h3>Android (Chrome)</h3>
+      <ol><li>Toque no menu <b>⋮</b>.</li><li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li></ol>
+    </div>
   </aside>
 </div>
 

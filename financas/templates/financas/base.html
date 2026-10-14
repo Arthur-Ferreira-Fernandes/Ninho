@@ -10,6 +10,7 @@
     {% if user.is_authenticated %}
       {% if user.membro %}<a class="tenant" href="{% url 'financas:familia' %}" title="Configurações da família"><i></i>{{ user.membro.familia }}</a>{% endif %}
       <div class="app-usuario">
+        <button type="button" class="btn sec instalar-app" data-instalar hidden onclick="instalarApp()">Instalar app</button>
         <button type="button" class="tema-switch" role="switch" onclick="trocarTema()" aria-label="Tema claro" title="Tema claro" aria-checked="{% if tema == 'claro' %}true{% else %}false{% endif %}"><span class="tema-trilho" aria-hidden="true"><span class="tema-fundo-icone sol">☀</span><span class="tema-fundo-icone lua">☾</span><span class="tema-bolinha"></span></span></button>
         <a class="perfil-link" href="{% url 'financas:meus_dados' %}" title="Meus dados"{% if request.resolver_match.url_name == "meus_dados" %} aria-current="page"{% endif %}>
           <span class="avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1" }}</span>

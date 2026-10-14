@@ -1,0 +1,15 @@
+{% load static %}<!doctype html>
+<html lang="pt-br" data-tema="{{ tema }}">
+<head>
+  {% include "financas/_head.html" %}
+  <title>Sem conexão · {{ marca.nome }}</title>
+</head>
+<body>
+  <main class="offline">
+    <img src="{% static 'financas/img/logo.svg' %}" alt="" width="56" height="56">
+    <h1>Sem conexão</h1>
+    <p>O {{ marca.nome }} precisa de internet para mostrar as contas da família. Assim que a conexão voltar, é só tentar de novo.</p>
+    <button class="btn" type="button" onclick="location.reload()">Tentar de novo</button>
+  </main>
+</body>
+</html>

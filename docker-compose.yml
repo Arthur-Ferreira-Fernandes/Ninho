@@ -1,3 +1,4 @@
+# Ambiente local parecido com a hospedagem: app + PostgreSQL.
 services:
   web:
     build: .
@@ -7,11 +8,28 @@ services:
       - "${NINHO_PORTA:-8002}:8000"
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?defina DJANGO_SECRET_KEY no arquivo .env}
+      DATABASE_URL: postgres://ninho:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no arquivo .env}@db:5432/ninho
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8002,http://127.0.0.1:8002}
       DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ninho
+      POSTGRES_USER: ninho
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - dados:/app/dados
+      - banco:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ninho -d ninho"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
-  dados:
+  banco:

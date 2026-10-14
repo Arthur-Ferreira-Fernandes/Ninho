@@ -1474,3 +1474,11 @@ a.barra-grupo:hover { background: var(--marca-50); }
   .dm-g-nome small { display: none; }
   .dm-subitens { margin-left: 20px; }
 }
+
+/* app instalável */
+.offline { max-width: 420px; margin: 18vh auto 0; text-align: center; display: grid; gap: 12px; justify-items: center; padding: 0 16px; }
+.offline h1 { margin: 8px 0 0; }
+.offline p { margin: 0; color: var(--muted); }
+.instalar-app { white-space: nowrap; }
+.app-card ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: .88rem; }
+.app-card h3 { margin: 12px 0 0; font-size: .9rem; }

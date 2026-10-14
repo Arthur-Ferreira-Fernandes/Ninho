@@ -2100,3 +2100,34 @@ class DetalhesDoMesTests(TestCase):
         cadastrar(outro, username="maria", familia="Outra")
         r = outro.get(reverse("financas:mes_detalhes", args=[self.conta.pk]))
         self.assertEqual(r.status_code, 404)
+
+
+class HospedagemPwaTests(TestCase):
+    def test_saude(self):
+        r = self.client.get(reverse("financas:saude"))
+        self.assertEqual((r.status_code, r.content), (200, b"ok"))
+
+    def test_manifest(self):
+        r = self.client.get(reverse("financas:manifest"))
+        self.assertEqual(r["Content-Type"], "application/manifest+json")
+        dados = r.json()
+        self.assertEqual(dados["start_url"], "/")
+        self.assertEqual(dados["display"], "standalone")
+        self.assertIn("maskable", [i["purpose"] for i in dados["icons"]])
+
+    def test_service_worker_na_raiz_e_sem_paginas_com_dados(self):
+        r = self.client.get(reverse("financas:service_worker"))
+        self.assertEqual(r["Content-Type"], "application/javascript")
+        self.assertEqual(r["Service-Worker-Allowed"], "/")
+        self.assertEqual(reverse("financas:service_worker"), "/sw.js")
+        corpo = r.content.decode()
+        self.assertIn('"/offline/"', corpo)
+        self.assertIn('startsWith("/static/")', corpo)
+
+    def test_paginas_anunciam_o_app(self):
+        r = self.client.get(reverse("financas:entrar"))
+        self.assertContains(r, 'rel="manifest"')
+        self.assertContains(r, "serviceWorker")
+
+    def test_offline_nao_precisa_de_login(self):
+        self.assertEqual(self.client.get(reverse("financas:offline")).status_code, 200)

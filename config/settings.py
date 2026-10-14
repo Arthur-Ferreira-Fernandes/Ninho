@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,18 +30,30 @@ def _lista(nome, padrao=""):
 
 # Sem variáveis de ambiente, vale a configuração de desenvolvimento local.
 # No Docker, elas vêm do docker-compose.yml / .env.
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY", 'django-insecure-tepgyh9y$zf3x0t5rgy78czpua+airbj5xf+!_^5=pj_^3#(l*')
+CHAVE_DE_DESENVOLVIMENTO = 'django-insecure-tepgyh9y$zf3x0t5rgy78czpua+airbj5xf+!_^5=pj_^3#(l*'
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", CHAVE_DE_DESENVOLVIMENTO)
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+
+if not DEBUG and SECRET_KEY == CHAVE_DE_DESENVOLVIMENTO:
+    raise ImproperlyConfigured("Defina DJANGO_SECRET_KEY: a chave de desenvolvimento não pode ir para produção.")
 
 ALLOWED_HOSTS = _lista("DJANGO_ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = _lista("DJANGO_CSRF_TRUSTED_ORIGINS")
 
-# Atrás de um proxy com HTTPS (ex.: hospedado na internet)
+# Endereço público informado pela plataforma de hospedagem (Render, Railway...)
+for _variavel in ("RENDER_EXTERNAL_HOSTNAME", "RAILWAY_PUBLIC_DOMAIN"):
+    if os.environ.get(_variavel):
+        ALLOWED_HOSTS.append(os.environ[_variavel])
+        CSRF_TRUSTED_ORIGINS.append("https://" + os.environ[_variavel])
+
+# Atrás de um proxy com HTTPS (hospedado na internet)
 if os.environ.get("DJANGO_HTTPS") == "1":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [r"^saude/$"]   # verificação de saúde da plataforma, por dentro
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SEGUNDOS", 60 * 60 * 24 * 30))
 
 
 # Application definition
@@ -93,12 +108,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.environ.get("DJANGO_DB_PATH", BASE_DIR / 'db.sqlite3'),
+# PostgreSQL quando DATABASE_URL existe (hospedagem e Docker); senão, SQLite local.
+if os.environ.get("DATABASE_URL"):
+    DATABASES = {"default": dj_database_url.config(conn_max_age=600, conn_health_checks=True)}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.environ.get("DJANGO_DB_PATH", BASE_DIR / 'db.sqlite3'),
+        }
     }
-}
 
 
 # Password validation
@@ -157,4 +176,14 @@ MARCA = {
     "nome": "Ninho",
     "slogan": "As finanças da sua família, no mesmo lugar.",
     "descricao": "Planeje o mês, confira o saldo real e veja na hora se a família está dentro do combinado.",
+}
+
+# Erros vão para a saída padrão: aparecem nos logs da plataforma de hospedagem
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {"django": {"handlers": ["console"], "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+                           "propagate": False}},
 }

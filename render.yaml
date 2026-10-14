@@ -1,0 +1,23 @@
+# Publicação no Render (https://render.com): Dashboard → New → Blueprint → escolha este repositório.
+# Cria o app (a partir do Dockerfile) e um PostgreSQL já ligado a ele.
+services:
+  - type: web
+    name: ninho
+    runtime: docker
+    healthCheckPath: /saude/
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ninho-banco
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_HTTPS
+        value: "1"
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+databases:
+  - name: ninho-banco
+    databaseName: ninho
+    user: ninho

@@ -1,13 +1,17 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import pwa, views
 from .forms import LoginForm
 
 app_name = "financas"
 
 urlpatterns = [
     path("", views.inicio, name="inicio"),
+    path("saude/", pwa.saude, name="saude"),
+    path("manifest.webmanifest", pwa.manifest, name="manifest"),
+    path("sw.js", pwa.service_worker, name="service_worker"),
+    path("offline/", pwa.offline, name="offline"),
     path("entrar/", auth_views.LoginView.as_view(template_name="financas/entrar.html",
                                                  authentication_form=LoginForm,
                                                  redirect_authenticated_user=True), name="entrar"),

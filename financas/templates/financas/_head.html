@@ -2,12 +2,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="{% if tema == 'claro' %}#0f5e55{% else %}#0e1413{% endif %}">
   <link rel="icon" type="image/svg+xml" href="{% static 'financas/img/favicon.svg' %}">
+  <link rel="manifest" href="{% url 'financas:manifest' %}">
+  <link rel="apple-touch-icon" href="{% static 'financas/img/apple-touch-icon.png' %}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="{{ marca.nome }}">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'financas/css/ninho.css' %}">
 
   <script>
+    // app instalável: registra o service worker (só arquivos visuais e a página sem conexão)
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("{% url 'financas:service_worker' %}").catch(() => {}));
+    }
+    // Android/Chrome: guarda o convite de instalação para o botão "Instalar app"
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      window.convitePWA = e;
+      document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = false));
+    });
+    function instalarApp() {
+      if (!window.convitePWA) return;
+      window.convitePWA.prompt();
+      window.convitePWA.userChoice.finally(() => {
+        window.convitePWA = null;
+        document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = true));
+      });
+    }
+
     // troca o tema na hora e guarda a escolha por 1 ano (o servidor lê o cookie)
     function trocarTema() {
       const novo = document.documentElement.dataset.tema === "claro" ? "escuro" : "claro";

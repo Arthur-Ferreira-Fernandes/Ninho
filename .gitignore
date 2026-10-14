@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 staticfiles/
 .env
+dados.json
+backup*.sql
+backup*.sqlite3
