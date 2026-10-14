@@ -842,18 +842,21 @@ def _item_do_movimento(m, data, hoje):
     return ItemDetalhe(data, m.nome, m.valor, "lançamento avulso", data > hoje)
 
 
-def _grupo(titulo, itens, base):
+def _grupo(titulo, itens, base, chave):
     total = sum((i.valor for i in itens), ZERO)
-    return {"titulo": titulo, "itens": itens, "total": total,
-            "pct": min(100, round(total * 100 / base)) if base > 0 else 0}
+    pct = round(total * 100 / base) if base > 0 else 0
+    return {"titulo": titulo, "chave": chave, "itens": itens, "total": total, "pct": pct,
+            "largura": min(100, pct), "previsto": sum((i.valor for i in itens if i.previsto), ZERO)}
 
 
 def detalhes_do_mes(dias, hoje):
-    """Tudo o que entra e sai no mês, item por item, para entender o resultado.
+    """Tudo o que entra e sai no mês, item por item: o mês gasta mais do que recebe?
 
-    Usa os mesmos dias de extrato_mes(), então os totais batem com totais_do_mes().
+    Olha só os valores do mês (não o saldo da conta). Usa os mesmos dias de
+    extrato_mes(), então os totais batem com totais_do_mes().
     """
     from .templatetags.dinheiro import brl
+
     ativos = [d for d in dias if d.ativo]
     if not ativos:
         return None
@@ -892,38 +895,33 @@ def detalhes_do_mes(dias, hoje):
                                      f"{brl(futuros[0].disponivel)} por dia", True))
 
     recebido = sum((i.valor for i in recebimentos), ZERO)
-    base = recebido or sum((d.saidas + d.gasto for d in ativos), ZERO)
-    gastos = [g for g in (_grupo("Contas fixas", fixas, base),
-                          _grupo("Cartão de crédito", cartao, base),
-                          _grupo("Dinheiro do dia a dia", dia_a_dia, base),
-                          _grupo("Lançamentos avulsos", avulsos, base)) if g["itens"]]
+    base = recebido
+    gastos = sorted((g for g in (_grupo("Contas fixas", fixas, base, "fixas"),
+                                 _grupo("Cartão de crédito", cartao, base, "cartao"),
+                                 _grupo("Dinheiro do dia a dia", dia_a_dia, base, "dia"),
+                                 _grupo("Lançamentos avulsos", avulsos, base, "avulsos")) if g["itens"]),
+                    key=lambda g: g["total"], reverse=True)
+    gasto = sum((g["total"] for g in gastos), ZERO)
+    guardado = _grupo("Investido", investido, base, "investido")
+    saidas = gasto + guardado["total"]
+    escala = max(recebido, saidas) or Decimal("1")
 
-    # o primeiro dia no negativo e o que mais pesou até ele
-    negativo = next((d for d in ativos if d.esperado < 0), None)
-    pesos = []
-    if negativo:
-        itens_ate = [i for i in fixas + cartao + avulsos + investido if i.data <= negativo.data]
-        ate = [d for d in ativos if d.data <= negativo.data]
-        itens_ate.append(ItemDetalhe(negativo.data, f"Dinheiro do dia a dia ({len(ate)} dia{'s' if len(ate) > 1 else ''})",
-                                     sum((d.gasto for d in ate), ZERO)))
-        pesos = sorted(itens_ate, key=lambda i: i.valor, reverse=True)[:3]
-        entradas_depois = [i for i in recebimentos if i.data > negativo.data]
-        volta = next((d for d in ativos if d.data > negativo.data and d.esperado >= 0), None)
-    else:
-        entradas_depois, volta = [], None
+    def largura(valor):
+        return float(valor * 100 / escala)
 
     return {
-        "inicio": ativos[0].inicio,
-        "fim": ativos[-1].esperado,
         "recebimentos": sorted(recebimentos, key=lambda i: i.data),
         "recebido": recebido,
+        "recebido_previsto": sum((i.valor for i in recebimentos if i.previsto), ZERO),
         "gastos": gastos,
-        "gasto": sum((g["total"] for g in gastos), ZERO),
-        "investido": _grupo("Investido", investido, base),
+        "gasto": gasto,
+        "investido": guardado,
+        "saidas": saidas,
+        "resultado": recebido - gasto,          # positivo: gasta menos do que recebe
+        "sobra": recebido - saidas,             # depois de investir
+        "pct_gasto": round(gasto * 100 / recebido) if recebido else None,
+        "barras": {"recebido": largura(recebido), "gasto": largura(gasto),
+                   "investido": largura(guardado["total"]), "linha": largura(recebido)},
         "pulados": pulados,
-        "negativo": negativo,
-        "pesos": pesos,
-        "volta": volta,
-        "entrada_seguinte": entradas_depois[0] if entradas_depois else None,
-        "menor": min(ativos, key=lambda d: d.esperado),
+        "ha_previstos": any(i.previsto for g in gastos for i in g["itens"]) or any(i.previsto for i in recebimentos),
     }

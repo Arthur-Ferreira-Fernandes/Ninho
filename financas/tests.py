@@ -2050,24 +2050,34 @@ class DetalhesDoMesTests(TestCase):
         d, t = detalhes_do_mes(dias, date(2026, 1, 15)), totais_do_mes(dias)
         self.assertEqual(d["recebido"], t["recebido"])
         self.assertEqual(d["gasto"], t["gasto"])
-        self.assertEqual(d["inicio"] + d["recebido"] - d["gasto"] - d["investido"]["total"], d["fim"])
-        titulos = [g["titulo"] for g in d["gastos"]]
-        self.assertEqual(titulos, ["Contas fixas", "Cartão de crédito", "Dinheiro do dia a dia"])
-        fatura = d["gastos"][1]["itens"][0]
+        self.assertEqual(d["sobra"], t["sobra"])
+        # ordenados pelo que mais pesa: aluguel 1000, dia a dia 310, fatura 200
+        self.assertEqual([g["titulo"] for g in d["gastos"]],
+                         ["Contas fixas", "Dinheiro do dia a dia", "Cartão de crédito"])
+        fatura = d["gastos"][2]["itens"][0]
         # comprada em 01/12: entra na fatura que fecha 25/12 e vence 10/01
         self.assertEqual(fatura.subitens, [("TV", "1/3", Decimal("200.00"))])
 
-    def test_explica_o_dia_negativo(self):
+    def test_compara_so_os_valores_do_mes(self):
         d = detalhes_do_mes(extrato_mes(self.conta, 2026, 1), date(2026, 1, 15))
-        # 500 − 10/dia − aluguel no dia 5 → negativo em 05/01; volta com o salário no dia 20
-        self.assertEqual(d["negativo"].data, date(2026, 1, 5))
-        self.assertEqual([(i.nome, i.valor) for i in d["pesos"]],
-                         [("Aluguel", Decimal("1000")), ("Dinheiro do dia a dia (5 dias)", Decimal("50.00"))])
-        self.assertEqual(d["volta"].data, date(2026, 1, 20))
-        self.assertEqual(d["entrada_seguinte"].nome, "Salário")
+        # recebe 3000, gasta 1000 + 310 + 200: sobra 1490, independente do saldo da conta
+        self.assertEqual(d["resultado"], Decimal("1490.00"))
+        self.assertEqual(d["pct_gasto"], 50)
+        self.assertEqual(d["gastos"][0]["pct"], 33)
+        self.assertNotIn("inicio", d)
+
+    def test_gasta_mais_do_que_recebe(self):
+        ContaFixa.objects.create(conta=self.conta, nome="Escola", valor=Decimal("2000"), dia=10)
+        d = detalhes_do_mes(extrato_mes(self.conta, 2026, 1), date(2026, 1, 15))
+        self.assertEqual(d["resultado"], Decimal("-510.00"))
+        self.assertEqual(d["barras"]["gasto"], 100.0)   # a barra maior ocupa tudo; o recebido fica menor
+        r = self.client.get(self.painel, {"mes": "2026-01"})
+        self.assertContains(r, "Você gasta mais do que recebe")
+        self.assertContains(r, "Faltam R$ 510,00")
 
     def test_painel_tem_a_janela(self):
         r = self.client.get(self.painel, {"mes": "2026-01"})
         self.assertContains(r, 'id="detalhes-mes"')
         self.assertContains(r, "Ver todos os detalhes")
-        self.assertContains(r, "Fica negativo em 05/01")
+        self.assertContains(r, "Você gasta menos do que recebe")
+        self.assertNotContains(r, "Fica negativo")
