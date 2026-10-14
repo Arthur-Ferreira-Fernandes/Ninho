@@ -193,6 +193,13 @@ class Conta(models.Model):
     # "dinheiro liberado" (parcelas e contas que acabaram): liberações até este mês já foram vistas
     liberado_visto_ate = models.DateField(null=True, blank=True)
 
+    # Carteira de investimentos: quanto já havia investido numa data e quanto rende ao ano.
+    # O valor esperado = esse saldo + o que foi guardado depois, tudo rendendo juros compostos.
+    investido_inicial = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    investido_em = models.DateField(null=True, blank=True)
+    rendimento_anual = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+                                           help_text="Rendimento em % ao ano (vazio: o dinheiro fica parado).")
+
     def __str__(self):
         return self.nome
 
@@ -615,3 +622,19 @@ class Objetivo(models.Model):
     @property
     def pct(self):
         return min(100, int(self.guardado * 100 / self.valor_alvo)) if self.valor_alvo > 0 else 0
+
+
+class ConferenciaInvestimento(models.Model):
+    """Quanto o banco/corretora mostrava nos investimentos numa data (para comparar com o esperado)."""
+
+    conta = models.ForeignKey(Conta, on_delete=models.CASCADE, related_name="conferencias_investimento")
+    data = models.DateField()
+    valor = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+        verbose_name = "conferência dos investimentos"
+        verbose_name_plural = "conferências dos investimentos"
+
+    def __str__(self):
+        return f"{self.data:%d/%m/%Y}: {self.valor}"

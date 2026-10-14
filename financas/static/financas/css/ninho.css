@@ -1845,3 +1845,50 @@ main:has(.analise-topo) { max-width: 1100px; }
   .mes-nav.com-seletor .mes-nome { flex: 1; }
   .seletor-mes.flutuante { left: 0; right: 0; width: auto; }
 }
+
+/* carteira de investimentos: saldo, rendimento e conferência com o banco */
+.carteira-card { margin-bottom: 16px; }
+.carteira-config { margin-top: 14px; }
+.carteira-config[hidden] { display: none; }
+.carteira-campos { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 0 14px; }
+.ajuda-carteira { margin: -4px 0 14px; color: var(--muted); font-size: .82rem; }
+.carteira-kpis { margin: 14px 0; }
+.carteira-kpis .kpi { margin: 0; }
+.sit-dentro { color: var(--pos); }
+.sit-acima { color: var(--azul-txt); }
+.sit-abaixo { color: var(--neg); }
+.conferir-investimento {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 170px auto; gap: 8px; align-items: center;
+  padding: 12px; margin-bottom: 14px; border-radius: var(--raio-sm); background: var(--sup-2);
+}
+.conferir-investimento .campo-input input { width: 100%; padding: 8px 10px 8px 34px; }
+.conferir-investimento .campo-input .prefixo { left: 10px; }
+.conferir-investimento input[type=date] { padding: 7px 8px; }
+.carteira-meses td { vertical-align: top; }
+@media (max-width: 760px) {
+  .carteira-campos { grid-template-columns: 1fr; }
+  .conferir-investimento { grid-template-columns: minmax(0, 1fr) auto; }
+  .conferir-investimento strong { grid-column: 1 / -1; }
+  .conferir-investimento input[type=date] { grid-column: 1; }
+  .conferir-investimento .btn { grid-column: 2; grid-row: 2 / span 2; }
+}
+.carteira-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.carteira-kpis strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
+@media (min-width: 1000px) { .carteira-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .carteira-kpis strong { font-size: 1.05rem; }
+  /* mês a mês vira cartões: mês e "deveria ter" em cima; entrou e rendeu; o valor do banco embaixo */
+  .carteira-meses thead { display: none; }
+  .carteira-meses, .carteira-meses tbody { display: block; }
+  .carteira-meses tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 4px; border-bottom: 1px solid var(--borda); }
+  .carteira-meses td { display: block; padding: 0 !important; border: 0 !important; text-align: left; }
+  .carteira-meses td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .carteira-meses td:nth-child(4) { grid-column: 2; grid-row: 1; text-align: right; font-size: 1rem; }
+  .carteira-meses td:nth-child(2) { grid-column: 1; grid-row: 2; font-size: .82rem; color: var(--muted); }
+  .carteira-meses td:nth-child(3) { grid-column: 2; grid-row: 2; font-size: .82rem; text-align: right; }
+  .carteira-meses td:nth-child(5) { grid-column: 1 / -1; grid-row: 3; font-size: .85rem; }
+  .carteira-meses td:nth-child(2)::before { content: "entrou "; }
+  .carteira-meses td:nth-child(3)::before { content: "rendeu "; color: var(--muted); }
+  .carteira-meses td:nth-child(5)::before { content: "no banco: "; color: var(--muted); }
+  .carteira-meses td:nth-child(5) small.bloco { display: inline; margin-left: 6px; }
+}

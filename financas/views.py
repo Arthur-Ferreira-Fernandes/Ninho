@@ -16,11 +16,12 @@ from django.views.decorators.http import require_POST
 from .calculos import (detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
-from .forms import (PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
+from .forms import (CarteiraForm, ConferenciaInvestimentoForm, PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
                     LancamentoForm, PagamentosSalarioFormSet, UsoDiarioForm, UsuarioForm)
+from . import rendimento
 from .insights import alertas as alertas_analise, categorias_do_mes, projecao_objetivo
 from .templatetags.dinheiro import brl
-from .models import (Aporte, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
+from .models import (Aporte, ConferenciaInvestimento, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
                      gerar_codigo_convite)
 
 # modelo da URL -> (Model, Form, título)
@@ -634,6 +635,8 @@ def painel(request, pk):
         "guardar": _guardar_info(conta, hoje),
         "investimentos": _investimentos(conta, hoje),
         "objetivos": [projecao_objetivo(o, conta, hoje) for o in conta.objetivos.prefetch_related("aportes")],
+        "carteira": rendimento.carteira(conta, hoje),
+        "form_carteira": CarteiraForm(instance=conta, initial={"investido_em": conta.investido_em or hoje}),
         "totais_fixas": {
             "receitas": receitas_fixas,
             "despesas": despesas_fixas + assinaturas["total_mes"],
@@ -857,6 +860,49 @@ def aporte_excluir(request, aporte_pk):
     else:
         messages.success(request, f"Valor avulso de {brl(aporte.valor)} em {aporte.data:%d/%m} excluído.")
     aporte.delete()
+    return _aba_investimentos(conta)
+
+
+@require_POST
+@com_familia
+def carteira_salvar(request, pk):
+    """Quanto já havia investido numa data e quanto rende ao ano."""
+    conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
+    form = CarteiraForm(request.POST, instance=conta, hoje=date.today())
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Investimentos atualizados.")
+    else:
+        _mostrar_erros(request, form)
+    return _aba_investimentos(conta)
+
+
+@require_POST
+@com_familia
+def investimento_conferir(request, pk):
+    """Registra quanto o banco mostrava nos investimentos e diz se está dentro do esperado."""
+    conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
+    form = ConferenciaInvestimentoForm(request.POST, hoje=date.today(),
+                                       instance=ConferenciaInvestimento(conta=conta))
+    if form.is_valid():
+        c = form.save()
+        esperado = rendimento.valor_esperado(conta, c.data)
+        dif = c.valor - esperado
+        texto = {"dentro": "dentro do esperado", "acima": f"{brl(dif)} acima do esperado",
+                 "abaixo": f"{brl(-dif)} abaixo do esperado"}[rendimento.situacao(dif, esperado)]
+        messages.success(request, f"Investimentos em {c.data:%d/%m/%Y}: {brl(c.valor)}, {texto} ({brl(esperado)}).")
+    else:
+        _mostrar_erros(request, form)
+    return _aba_investimentos(conta)
+
+
+@require_POST
+@com_familia
+def investimento_conferencia_excluir(request, conferencia_pk):
+    c = get_object_or_404(ConferenciaInvestimento, pk=conferencia_pk, conta__familia=request.familia)
+    conta = c.conta
+    messages.success(request, f"Conferência de {c.data:%d/%m/%Y} excluída.")
+    c.delete()
     return _aba_investimentos(conta)
 
 

@@ -7,8 +7,8 @@ from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, Us
 from django.contrib.auth.models import User
 
 from .templatetags.dinheiro import brl
-from .models import (Aporte, Categoria, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta,
-                     ContaFixa, Familia, Lancamento, Objetivo, UsoDiario)
+from .models import (Aporte, Categoria, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia,
+                     ConferenciaInvestimento, Conta, ContaFixa, Familia, Lancamento, Objetivo, UsoDiario)
 
 DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
@@ -776,6 +776,67 @@ class ObjetivoForm(forms.ModelForm):
 
     def clean_valor_inicial(self):
         valor = self.cleaned_data["valor_inicial"] or Decimal("0")
+        if valor < 0:
+            raise forms.ValidationError("O valor não pode ser negativo.")
+        return valor
+
+
+class CarteiraForm(forms.ModelForm):
+    """Quanto já havia investido numa data e quanto rende ao ano."""
+
+    class Meta:
+        model = Conta
+        fields = ["investido_inicial", "investido_em", "rendimento_anual"]
+        labels = {"investido_inicial": "Quanto você tem guardado/investido", "investido_em": "Em que dia",
+                  "rendimento_anual": "Rende quanto ao ano"}
+        widgets = {
+            "investido_inicial": _dinheiro(),
+            "investido_em": DATA,
+            "rendimento_anual": forms.NumberInput(attrs={"step": "0.01", "min": "0", "max": "100",
+                                                         "inputmode": "decimal", "placeholder": "Ex.: 10,5"}),
+        }
+
+    def __init__(self, *args, hoje=None, **kwargs):
+        self.hoje = hoje or date.today()
+        super().__init__(*args, **kwargs)
+        for campo in self.fields.values():
+            campo.required = False
+        self.fields["rendimento_anual"].help_text = ""
+
+    def clean(self):
+        dados = super().clean()
+        valor, data, taxa = dados.get("investido_inicial"), dados.get("investido_em"), dados.get("rendimento_anual")
+        if valor is not None and valor < 0:
+            self.add_error("investido_inicial", "O valor não pode ser negativo.")
+        if valor is not None and data is None:
+            dados["investido_em"] = self.hoje          # sem data: o saldo é o de hoje
+        if data and data > self.hoje:
+            self.add_error("investido_em", "Informe uma data de hoje ou do passado.")
+        if valor is None and data:
+            self.add_error("investido_inicial", "Informe quanto havia investido nesse dia.")
+        if taxa is not None and not 0 <= taxa <= 100:
+            self.add_error("rendimento_anual", "Use um valor entre 0% e 100% ao ano.")
+        return dados
+
+
+class ConferenciaInvestimentoForm(forms.ModelForm):
+    class Meta:
+        model = ConferenciaInvestimento
+        fields = ["data", "valor"]
+        widgets = {"data": DATA, "valor": _dinheiro()}
+
+    def __init__(self, *args, hoje=None, **kwargs):
+        self.hoje = hoje or date.today()
+        super().__init__(*args, **kwargs)
+
+    def clean_data(self):
+        data = self.cleaned_data["data"]
+        if data > self.hoje:
+            raise forms.ValidationError("Só dá para conferir o valor de hoje ou de dias passados.")
+        return data
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
         if valor < 0:
             raise forms.ValidationError("O valor não pode ser negativo.")
         return valor

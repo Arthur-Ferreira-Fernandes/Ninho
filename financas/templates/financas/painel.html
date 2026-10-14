@@ -719,15 +719,17 @@
       <small class="rotulo">{% if investimentos.mensal %}{% if conta.guardar_modo == "percentual" %}{{ conta.guardar_percentual|floatformat:"-2" }}% do salário{% else %}valor fixo{% endif %} · no dia de maior saldo{% else %}<a href="{% url 'financas:conta_editar' conta.pk %}#guardar">definir um valor mensal</a>{% endif %}</small>
     </div>
     <div class="kpi kpi-invest">
-      <span class="rotulo">Guardado até hoje</span>
+      <span class="rotulo">{% if carteira %}Guardado pelo app{% else %}Guardado até hoje{% endif %}</span>
       <strong>{{ investimentos.total_hoje|brl }}</strong>
       <small class="rotulo">{{ investimentos.confirmados }} {% if investimentos.confirmados == 1 %}mês confirmado{% else %}meses confirmados{% endif %}{% if investimentos.nao_guardados %} · {{ investimentos.nao_guardados }} sem guardar{% endif %}{% if investimentos.avulsos %} · {{ investimentos.avulsos|brl }} avulso{% endif %}</small>
     </div>
+    {% if not carteira %}
     <div class="kpi kpi-invest">
       <span class="rotulo">Daqui a 12 meses</span>
       <strong>{{ investimentos.total_12|brl }}</strong>
       <small class="rotulo">{% if investimentos.mensal %}se continuar guardando {{ investimentos.mensal|brl }}/mês{% else %}com o que já está guardado e agendado{% endif %}</small>
     </div>
+    {% endif %}
     <div class="kpi kpi-invest">
       <span class="rotulo">Próximo depósito</span>
       <strong>{% if investimentos.proximo %}{{ investimentos.proximo.data|date:"d/m" }}{% else %}—{% endif %}</strong>
@@ -738,6 +740,8 @@
   <div class="alerta aviso-amarelo">Você tem {{ investimentos.pendentes }} {% if investimentos.pendentes == 1 %}mês{% else %}meses{% endif %} para confirmar. Informe quanto guardou de fato em cada um, ou marque “Não consegui” (eles contam com o valor previsto até lá).</div>
   {% endif %}
   {% endif %}
+
+  {% include "financas/_carteira.html" %}
 
   <div class="contas-layout invest-layout">
     <div class="card">

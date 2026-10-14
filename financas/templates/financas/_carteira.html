@@ -1,0 +1,76 @@
+{% load dinheiro %}
+<div class="card carteira-card" id="carteira">
+  <div class="topo">
+    <div>
+      <h2 style="margin:0">Seu dinheiro investido</h2>
+      <p class="rotulo" style="margin:4px 0 0">{% if carteira %}{% if conta.rendimento_anual %}Rendendo {{ conta.rendimento_anual|floatformat:"-2" }}% ao ano{% else %}Sem rendimento informado (dinheiro parado){% endif %}{% if conta.investido_em %} · saldo de {{ conta.investido_inicial|brl }} em {{ conta.investido_em|date:"d/m/Y" }}{% endif %}{% else %}Informe quanto já tem guardado e quanto rende: o {{ marca.nome }} calcula quanto deveria haver a cada mês e você confere com o banco.{% endif %}</p>
+    </div>
+    {% if carteira %}<button type="button" class="btn sec" data-alternar="carteira-config" aria-expanded="false">Alterar</button>{% endif %}
+  </div>
+
+  <form method="post" action="{% url 'financas:carteira_salvar' conta.pk %}" class="carteira-config" id="carteira-config"{% if carteira %} hidden{% endif %}>{% csrf_token %}
+    <div class="carteira-campos">
+      {% with field=form_carteira.investido_inicial %}{% include "financas/_campo.html" with prefixo="R$" %}{% endwith %}
+      {% with field=form_carteira.investido_em %}{% include "financas/_campo.html" %}{% endwith %}
+      {% with field=form_carteira.rendimento_anual %}{% include "financas/_campo.html" with sufixo="% a.a." %}{% endwith %}
+    </div>
+    <p class="ajuda-carteira">O rendimento ao ano aparece no app do banco ou da corretora (ex.: “10,5% a.a.”). Se o investimento rende “% do CDI”, multiplique essa porcentagem pela taxa atual do CDI. Deixe em branco se o dinheiro fica parado. É uma estimativa bruta: não desconta o imposto de renda.</p>
+    <button type="submit" class="btn">Salvar</button>
+  </form>
+
+  {% if carteira %}
+  <div class="kpis carteira-kpis">
+    <div class="kpi kpi-invest"><span class="rotulo">Deveria ter hoje</span><strong>{{ carteira.esperado_hoje|brl }}</strong>
+      <small class="rotulo">{{ carteira.aplicado|brl }} aplicado{% if carteira.rendimento_ate_hoje %} + {{ carteira.rendimento_ate_hoje|brl }} de rendimento{% endif %}</small></div>
+    <div class="kpi kpi-invest"><span class="rotulo">Rende por mês</span><strong>{% if conta.rendimento_anual %}{{ carteira.rendimento_mes|brl }}{% else %}—{% endif %}</strong>
+      <small class="rotulo">{% if conta.rendimento_anual %}com o saldo de hoje{% else %}informe o rendimento ao ano{% endif %}</small></div>
+    <div class="kpi kpi-invest"><span class="rotulo">Daqui a 12 meses</span><strong>{{ carteira.em_12_meses|brl }}</strong>
+      <small class="rotulo">rendendo e guardando o previsto</small></div>
+    <div class="kpi kpi-invest"><span class="rotulo">Última conferência</span>
+      {% if carteira.ultima %}{% with c=carteira.ultima %}
+      <strong class="sit-{{ c.situacao }}">{% if c.situacao == "dentro" %}Dentro do esperado{% elif c.situacao == "acima" %}+{{ c.diferenca|brl }}{% else %}−{{ c.diferenca|abs_valor|brl }}{% endif %}</strong>
+      <small class="rotulo">{{ c.obj.valor|brl }} em {{ c.obj.data|date:"d/m" }} · esperado {{ c.esperado|brl }}</small>
+      {% endwith %}{% else %}<strong>—</strong><small class="rotulo">confira com o valor do banco</small>{% endif %}</div>
+  </div>
+
+  <form method="post" action="{% url 'financas:investimento_conferir' conta.pk %}" class="conferir-investimento">{% csrf_token %}
+    <strong>Conferir com o banco</strong>
+    <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+      <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" required placeholder="valor que aparece no banco" aria-label="Valor real dos investimentos">
+    </div>
+    <input type="date" name="data" required value="{{ hoje|date:'Y-m-d' }}" aria-label="Data do valor">
+    <button type="submit" class="btn">Conferir</button>
+  </form>
+
+  <div class="tabela-rolagem-x">
+  <table class="lista carteira-meses">
+    <thead><tr><th>Mês</th><th class="num">Entrou</th><th class="num">Rendeu</th><th class="num">Deveria ter no fim</th><th class="num">No banco</th></tr></thead>
+    <tbody>
+    {% for l in carteira.meses %}
+    <tr>
+      <td><b>{{ l.mes|date:"M/Y"|capfirst }}</b>{% if l.parcial %} <small class="rotulo">até {{ l.fim|date:"d/m" }}</small>{% endif %}</td>
+      <td class="num">{% if l.entrou %}{{ l.entrou|brl }}{% else %}—{% endif %}</td>
+      <td class="num pos">{% if l.rendeu %}+{{ l.rendeu|brl }}{% else %}—{% endif %}</td>
+      <td class="num"><b>{{ l.esperado|brl }}</b></td>
+      <td class="num">{% if l.conferencia %}{% with c=l.conferencia %}
+        {{ c.obj.valor|brl }}
+        <small class="bloco sit-{{ c.situacao }}">{% if c.situacao == "dentro" %}✓ dentro do esperado{% elif c.situacao == "acima" %}+{{ c.diferenca|brl }} acima{% else %}−{{ c.diferenca|abs_valor|brl }} abaixo{% endif %}{% if c.obj.data != l.fim %} · em {{ c.obj.data|date:"d/m" }}{% endif %}</small>
+        <form method="post" action="{% url 'financas:investimento_conferencia_excluir' c.obj.pk %}" class="inline">{% csrf_token %}
+          <button type="submit" class="acao-item">Excluir</button>
+        </form>
+      {% endwith %}{% else %}<span class="rotulo">não conferido</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="rotulo nota-lista">“Deveria ter” soma o saldo informado e o que foi guardado depois (confirmado ou previsto), tudo rendendo desde o dia em que entrou. Até 1% de diferença conta como dentro do esperado. Valor bem abaixo costuma ser resgate, imposto ou taxa menor que a informada.</p>
+  {% endif %}
+</div>
+<script>
+document.querySelectorAll("[data-alternar]").forEach((b) => b.addEventListener("click", () => {
+  const alvo = document.getElementById(b.dataset.alternar);
+  alvo.hidden = !alvo.hidden;
+  b.setAttribute("aria-expanded", !alvo.hidden);
+}));
+</script>
