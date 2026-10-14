@@ -1,0 +1,26 @@
+{% load dinheiro %}{# Grade de meses por ano para pular direto a qualquer mês; aberta pelo botão com aria-controls="seletor-mes-{{ aba }}" #}
+<div class="seletor-mes{% if classe %} {{ classe }}{% endif %}" id="seletor-mes-{{ aba }}" role="dialog" aria-label="Escolher mês" data-seletor-mes hidden>
+  <div class="seletor-ano">
+    <button type="button" class="btn fantasma" data-ano-passo="-1" aria-label="Ano anterior">‹</button>
+    <strong data-ano-nome>{{ mes.year }}</strong>
+    <button type="button" class="btn fantasma" data-ano-passo="1" aria-label="Próximo ano">›</button>
+  </div>
+  {% for a in anos_seletor %}
+  <div class="seletor-grade" data-ano="{{ a.ano }}"{% if a.ano != mes.year %} hidden{% endif %}>
+    {% for m in a.meses %}
+      {% if m.ativo %}
+      <a class="seletor-m c-{{ m.cor }}{% if m.data == mes %} sel{% endif %}{% if m.futuro %} futuro{% endif %}{% if m.aberto %} aberto{% endif %}"
+         href="?mes={{ m.data|date:'Y-m' }}#{{ aba }}"
+         data-tip="{% if m.futuro or m.aberto %}Deve fechar com{% else %}Fechou com{% endif %} {{ m.fim|brl }}"
+         aria-label="{{ m.data|date:'F \d\e Y' }}: {% if m.futuro or m.aberto %}deve fechar com{% else %}fechou com{% endif %} {{ m.fim|brl }}">{{ m.data|date:"b"|capfirst }}</a>
+      {% else %}
+      <span class="seletor-m inativo" title="Antes do início do cálculo">{{ m.data|date:"b"|capfirst }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <div class="seletor-rodape">
+    <p class="legenda-nota">Cor = saldo no fim de cada mês. Tracejado = previsão.</p>
+    {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec" href="?mes={{ mes_hoje }}#{{ aba }}">Este mês</a>{% endif %}
+  </div>
+</div>

@@ -262,34 +262,13 @@
       {% else %}
         <span class="btn fantasma desativado" aria-disabled="true" title="O cálculo começa em {{ conta.data_inicio|date:'d/m/Y' }}">‹</span>
       {% endif %}
-      <button type="button" class="mes-escolher" id="mes-escolher" aria-expanded="false" aria-controls="seletor-mes">
+      <button type="button" class="mes-escolher" aria-expanded="false" aria-controls="seletor-mes-extrato" aria-haspopup="dialog">
         {{ mes|date:"F \d\e Y"|capfirst }} <span aria-hidden="true">▾</span>
       </button>
       <a class="btn fantasma" href="?mes={{ mes_seguinte }}#extrato" aria-label="Próximo mês" title="Próximo mês">›</a>
     </nav>
 
-    <div class="seletor-mes" id="seletor-mes" role="dialog" aria-label="Escolher mês" hidden>
-      <div class="seletor-ano">
-        <button type="button" class="btn fantasma" data-ano-passo="-1" aria-label="Ano anterior">‹</button>
-        <strong id="seletor-ano-nome">{{ mes.year }}</strong>
-        <button type="button" class="btn fantasma" data-ano-passo="1" aria-label="Próximo ano">›</button>
-      </div>
-      {% for a in anos_seletor %}
-      <div class="seletor-grade" data-ano="{{ a.ano }}"{% if a.ano != mes.year %} hidden{% endif %}>
-        {% for m in a.meses %}
-          {% if m.ativo %}
-          <a class="seletor-m c-{{ m.cor }}{% if m.data == mes %} sel{% endif %}{% if m.futuro %} futuro{% endif %}{% if m.aberto %} aberto{% endif %}"
-             href="?mes={{ m.data|date:'Y-m' }}#extrato"
-             data-tip="{% if m.futuro or m.aberto %}Deve fechar com{% else %}Fechou com{% endif %} {{ m.fim|brl }}"
-             aria-label="{{ m.data|date:'F \d\e Y' }}: {% if m.futuro or m.aberto %}deve fechar com{% else %}fechou com{% endif %} {{ m.fim|brl }}">{{ m.data|date:"b"|capfirst }}</a>
-          {% else %}
-          <span class="seletor-m inativo" title="Antes do início do cálculo">{{ m.data|date:"b"|capfirst }}</span>
-          {% endif %}
-        {% endfor %}
-      </div>
-      {% endfor %}
-      <p class="legenda-nota">Cor = saldo no fim de cada mês (mesma escala do mapa). Tracejado = previsão.</p>
-    </div>
+    {% include "financas/_seletor_mes.html" with aba="extrato" %}
     <div class="mapa">
       {% for s in "STQQSSD" %}<span class="mapa-semana" aria-hidden="true">{{ s }}</span>{% endfor %}
       {% for _ in vazios_inicio %}<span class="mapa-vazio" aria-hidden="true"></span>{% endfor %}
@@ -330,11 +309,14 @@
   <div class="card extrato-card">
     <div class="extrato-cab">
       <h2>Extrato do mês</h2>
-      <nav class="mes-nav" aria-label="Mês">
-        <a class="btn fantasma" href="?mes={{ mes_anterior }}#mensal" aria-label="Mês anterior">‹</a>
-        <span class="mes-nome">{{ mes|date:"F \d\e Y"|capfirst }}</span>
-        <a class="btn fantasma" href="?mes={{ mes_seguinte }}#mensal" aria-label="Próximo mês">›</a>
+      <nav class="mes-nav com-seletor" aria-label="Mês">
+        {% if pode_voltar %}<a class="btn fantasma" href="?mes={{ mes_anterior }}#mensal" aria-label="Mês anterior" title="Mês anterior">‹</a>
+        {% else %}<span class="btn fantasma desativado" aria-disabled="true" title="O cálculo começa em {{ conta.data_inicio|date:'d/m/Y' }}">‹</span>{% endif %}
+        <button type="button" class="mes-escolher mes-nome" aria-expanded="false" aria-controls="seletor-mes-mensal" aria-haspopup="dialog"
+                title="Escolher outro mês">{{ mes|date:"F \d\e Y"|capfirst }} <span aria-hidden="true">▾</span></button>
+        <a class="btn fantasma" href="?mes={{ mes_seguinte }}#mensal" aria-label="Próximo mês" title="Próximo mês">›</a>
         {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec" href="?mes={{ mes_hoje }}#mensal">Hoje</a>{% endif %}
+        {% include "financas/_seletor_mes.html" with aba="mensal" classe="flutuante" %}
       </nav>
     </div>
 
@@ -935,11 +917,10 @@
     });
   })();
 
-  // seletor de mês do mapa: grade de meses por ano
-  (function () {
-    const botao = document.getElementById("mes-escolher");
-    const painel = document.getElementById("seletor-mes");
-    if (!botao || !painel) return;
+  // seletores de mês (mapa e extrato mensal): grade de meses por ano para pular direto a qualquer mês
+  document.querySelectorAll("[data-seletor-mes]").forEach((painel) => {
+    const botao = document.querySelector(`[aria-controls="${painel.id}"]`);
+    if (!botao) return;
     const grades = [...painel.querySelectorAll(".seletor-grade")];
     const anos = grades.map((g) => +g.dataset.ano);
     let ano = +painel.querySelector(".seletor-grade:not([hidden])").dataset.ano;
@@ -947,7 +928,7 @@
     function mostrarAno(novo) {
       ano = Math.min(Math.max(novo, anos[0]), anos[anos.length - 1]);
       grades.forEach((g) => { g.hidden = +g.dataset.ano !== ano; });
-      document.getElementById("seletor-ano-nome").textContent = ano;
+      painel.querySelector("[data-ano-nome]").textContent = ano;
       painel.querySelector('[data-ano-passo="-1"]').disabled = ano === anos[0];
       painel.querySelector('[data-ano-passo="1"]').disabled = ano === anos[anos.length - 1];
     }
@@ -966,7 +947,7 @@
       if (e.key === "Escape" && !painel.hidden) { abrir(false); botao.focus(); }
     });
     mostrarAno(ano);
-  })();
+  });
 
   // abas: a aba aberta fica no endereço (#extrato, #contas, #conferencias)
   (function () {

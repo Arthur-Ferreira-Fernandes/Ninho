@@ -752,8 +752,12 @@ class SeletorMesTests(TestCase):
         anos = [a["ano"] for a in r.context["anos_seletor"]]
         self.assertEqual(anos[0], 2026)
         self.assertEqual(anos[-1], date.today().year + 1)
-        self.assertContains(r, 'id="seletor-mes"')
+        # um seletor no mapa (extrato diário) e outro no extrato mensal, cada um voltando para a sua aba
+        self.assertContains(r, 'id="seletor-mes-extrato"')
+        self.assertContains(r, 'id="seletor-mes-mensal"')
+        self.assertContains(r, 'aria-controls="seletor-mes-mensal"')
         self.assertContains(r, 'href="?mes=2026-07#extrato"')
+        self.assertContains(r, 'href="?mes=2026-07#mensal"')
 
 
 class EditarExcluirLancamentoTests(TestCase):
