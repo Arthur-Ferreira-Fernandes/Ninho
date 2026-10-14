@@ -1,0 +1,6 @@
+<form method="post" action="{% url 'financas:ocorrencia_pular' m.objeto.pk %}" class="pular-form"
+      onsubmit="return confirm('{{ m.nome|escapejs }} não vai acontecer {{ quando }}? Só esta vez sai das contas.')">{% csrf_token %}
+  <input type="hidden" name="referencia" value="{{ m.evento.vencimento|date:'Y-m-d' }}">
+  <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+  <button type="submit" class="acao-item perigo-texto">Pular {{ quando }}</button>
+</form>

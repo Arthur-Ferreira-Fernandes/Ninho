@@ -41,7 +41,7 @@ def _contexto_item(modelo, conta, form, item=None):
     if modelo == "fixa":
         if item is None or not item.pk:
             return {}
-        ultimos = list(item.pagamentos.all()[:3])
+        ultimos = list(item.pagamentos.filter(situacao=PagamentoConta.PAGO)[:3])
         if not ultimos:
             return {}
         media = (sum((p.valor for p in ultimos), Decimal("0")) / len(ultimos)).quantize(Decimal("0.01"))
@@ -405,18 +405,21 @@ def _situacao_periodica(fixa, hoje):
     """Para contas a cada X dias: a próxima ocorrência ainda não marcada e a última marcada."""
     intervalo = fixa.intervalo_dias or 30
     eventos = eventos_fixa(fixa, hoje - timedelta(days=intervalo * 3), hoje + timedelta(days=intervalo * 3))
-    pendente = next((e for e in eventos if e.pagamento is None), None)
-    ultima = max(fixa.pagamentos.all(), key=lambda p: p.data, default=None)
+    pendente = next((e for e in eventos if not e.feito), None)
+    ultima = max((p for p in fixa.pagamentos.all() if p.feito), key=lambda p: p.data, default=None)
     return {"proxima_evento": pendente, "ultima_compra": ultima,
             "dia": pendente.data.day if pendente else fixa.dia}
 
 
 def _situacao_do_mes(fixa, hoje):
-    """Para contas variáveis: vencimento deste mês e o pagamento dele, se houver."""
+    """Para contas variáveis: vencimento deste mês e o que foi registrado nele, se houver."""
     vencimento = date(hoje.year, hoje.month, min(fixa.dia, calendar.monthrange(hoje.year, hoje.month)[1]))
-    pagamento = next((p for p in fixa.pagamentos.all()
-                      if (p.referencia.year, p.referencia.month) == (hoje.year, hoje.month)), None)
-    return {"vencimento_mes": vencimento, "pagamento_mes": pagamento}
+    registro = next((p for p in fixa.pagamentos.all()
+                     if (p.referencia.year, p.referencia.month) == (hoje.year, hoje.month)), None)
+    if registro and registro.situacao == PagamentoConta.REMARCADO:
+        vencimento = registro.data   # o link leva para o dia remarcado
+    return {"vencimento_mes": vencimento, "pagamento_mes": registro if registro and registro.feito else None,
+            "pulado_mes": registro if registro and registro.pulado else None}
 
 
 def _recorrentes(fixas, assinaturas, hoje):
@@ -784,27 +787,35 @@ def aporte_excluir(request, aporte_pk):
     return _aba_investimentos(conta)
 
 
-# ---------- Contas variáveis: marcar como paga ----------
+# ---------- Ocorrências das contas fixas: pagar, remarcar, pular ----------
+
+def _registro_da_ocorrencia(fixa, referencia):
+    if fixa.periodica:
+        # a cada X dias: um registro por ocorrência (pode haver mais de uma no mês)
+        return fixa.pagamentos.filter(referencia=referencia).first()
+    return fixa.pagamentos.filter(referencia__year=referencia.year, referencia__month=referencia.month).first()
+
 
 @require_POST
 @com_familia
 def pagamento_registrar(request, fixa_pk):
-    """Marca a ocorrência (mês) de uma conta variável como paga, com o valor real."""
+    """Registra uma ocorrência: paga (com o valor real) ou remarcada para outra data/valor."""
     fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia)
     referencia = _data_param(request.POST, "referencia")
     if referencia is None:
         raise Http404
-    if fixa.periodica:
-        # a cada X dias: uma marcação por ocorrência (pode haver mais de uma no mês)
-        existente = fixa.pagamentos.filter(referencia=referencia).first()
-    else:
-        existente = fixa.pagamentos.filter(referencia__year=referencia.year,
-                                           referencia__month=referencia.month).first()
+    remarcar = request.POST.get("situacao") == PagamentoConta.REMARCADO and fixa.marcavel
+    existente = _registro_da_ocorrencia(fixa, referencia)
     form = PagamentoContaForm(request.POST, instance=existente or PagamentoConta(fixa=fixa, referencia=referencia))
     if form.is_valid():
+        form.instance.situacao = PagamentoConta.REMARCADO if remarcar else PagamentoConta.PAGO
         p = form.save()
         verbo = "recebida" if fixa.tipo == ContaFixa.RECEITA else "paga"
-        if not fixa.marcavel:
+        if remarcar:
+            messages.success(request, f"{fixa.nome} remarcada só desta vez: {brl(p.valor)} previsto para "
+                                      f"{p.data:%d/%m/%Y}." + (f" As seguintes contam a partir dessa data."
+                                                                if fixa.periodica else " Os outros meses não mudam."))
+        elif not fixa.marcavel:
             messages.success(request, f"{fixa.nome} de {referencia:%m/%Y} ajustado só neste mês: "
                                       f"{brl(p.valor)} em {p.data:%d/%m}. Os outros meses continuam com {brl(fixa.valor)}.")
         elif fixa.periodica:
@@ -822,10 +833,33 @@ def pagamento_registrar(request, fixa_pk):
 
 @require_POST
 @com_familia
+def ocorrencia_pular(request, fixa_pk):
+    """Esta ocorrência não acontece (só ela); as outras continuam como estão."""
+    fixa = get_object_or_404(ContaFixa, pk=fixa_pk, conta__familia=request.familia)
+    referencia = _data_param(request.POST, "referencia")
+    if referencia is None:
+        raise Http404
+    registro = _registro_da_ocorrencia(fixa, referencia) or PagamentoConta(fixa=fixa, referencia=referencia)
+    registro.situacao, registro.valor, registro.data = PagamentoConta.PULADO, Decimal("0"), registro.referencia
+    registro.save()
+    if fixa.periodica:
+        proxima = registro.data + timedelta(days=fixa.intervalo_dias or 30)
+        messages.success(request, f"{fixa.nome} de {registro.data:%d/%m} pulada. Próxima prevista para {proxima:%d/%m/%Y}.")
+    else:
+        messages.success(request, f"{fixa.nome} pulada em {registro.referencia:%m/%Y}. Os outros meses continuam.")
+    return _voltar_ao_painel("fixa", fixa, request.POST.get("voltar") or f"dia:{referencia.isoformat()}")
+
+
+@require_POST
+@com_familia
 def pagamento_excluir(request, pagamento_pk):
     pagamento = get_object_or_404(PagamentoConta, pk=pagamento_pk, fixa__conta__familia=request.familia)
     fixa = pagamento.fixa
-    if fixa.marcavel:
+    if pagamento.pulado:
+        messages.success(request, f"{fixa.nome} volta a acontecer em {pagamento.referencia:%d/%m/%Y}.")
+    elif pagamento.situacao == PagamentoConta.REMARCADO:
+        messages.success(request, f"Remarcação de {fixa.nome} desfeita; volta para {pagamento.referencia:%d/%m/%Y}.")
+    elif fixa.marcavel:
         messages.success(request, f"Pagamento de {fixa.nome} de {pagamento.referencia:%m/%Y} desfeito; "
                                   "volta a valer a estimativa.")
     else:

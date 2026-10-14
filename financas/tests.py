@@ -1704,7 +1704,7 @@ class AjusteDoMesTests(TestCase):
 
     def test_tela_mostra_alterar_so_neste_mes(self):
         r = self.client.get(reverse("financas:painel", args=[self.conta.pk]) + "?mes=2026-02&dia=2026-02-05")
-        self.assertContains(r, "Alterar só neste mês")
+        self.assertContains(r, "Alterar ou pular só neste mês")
 
 
 class EncerrarTests(TestCase):
@@ -1961,3 +1961,71 @@ class MeusDadosTests(TestCase):
         r = outro.get(self.url)
         self.assertEqual(r.status_code, 200)
         self.assertNotIn("dados-parentesco", campos(r, "dados"))
+
+
+class RemarcarPularTests(TestCase):
+    """Uma ocorrência que não acontece no dia previsto: remarcar ou pular só ela."""
+
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("5000"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("0"))
+        self.carro = ContaFixa.objects.create(conta=self.conta, nome="Abastecer", valor=Decimal("200"),
+                                              dia=10, frequencia=ContaFixa.DIAS, intervalo_dias=15,
+                                              proxima=date(2026, 1, 10))
+        self.aluguel = ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1000"), dia=5)
+        self.luz = ContaFixa.objects.create(conta=self.conta, nome="Luz", valor=Decimal("120"), dia=20, variavel=True)
+
+    def post(self, nome, fixa, **dados):
+        return self.client.post(reverse(f"financas:{nome}", args=[fixa.pk]), dados)
+
+    def datas(self, fixa, inicio=date(2026, 1, 1), fim=date(2026, 2, 28)):
+        return [e.data for e in eventos_fixa(ContaFixa.objects.get(pk=fixa.pk), inicio, fim)]
+
+    def test_remarcar_abastecimento_empurra_as_proximas(self):
+        self.post("pagamento_registrar", self.carro, referencia="2026-01-10", situacao="remarcado",
+                  valor="200", data="2026-01-13")
+        self.assertEqual(self.datas(self.carro), [date(2026, 1, 13), date(2026, 1, 28), date(2026, 2, 12), date(2026, 2, 27)])
+        e = eventos_fixa(ContaFixa.objects.get(pk=self.carro.pk), date(2026, 1, 1), date(2026, 1, 31))[0]
+        self.assertTrue(e.remarcado)
+        self.assertFalse(e.feito)
+        # depois, quando abastece de fato, o mesmo registro vira compra feita
+        self.post("pagamento_registrar", self.carro, referencia="2026-01-10", valor="230", data="2026-01-14")
+        p = PagamentoConta.objects.get(fixa=self.carro)
+        self.assertEqual((p.situacao, p.valor, p.data), (PagamentoConta.PAGO, Decimal("230"), date(2026, 1, 14)))
+
+    def test_pular_abastecimento_mantem_o_ritmo(self):
+        antes = saldo_esperado(self.conta, date(2026, 1, 31)).esperado
+        self.post("ocorrencia_pular", self.carro, referencia="2026-01-25")
+        self.assertEqual(self.datas(self.carro), [date(2026, 1, 10), date(2026, 2, 9), date(2026, 2, 24)])
+        self.assertEqual(saldo_esperado(self.conta, date(2026, 1, 31)).esperado, antes + 200)
+
+    def test_pular_aluguel_so_em_um_mes(self):
+        self.post("ocorrencia_pular", self.aluguel, referencia="2026-02-05")
+        self.assertEqual(self.datas(self.aluguel, fim=date(2026, 3, 31)), [date(2026, 1, 5), date(2026, 3, 5)])
+        self.assertNotIn(date(2026, 2, 5), [d for d, _ in proximas_fixas(self.conta, date(2026, 1, 31), 10)])
+
+    def test_dia_mostra_pulado_e_desfazer_volta(self):
+        self.post("ocorrencia_pular", self.aluguel, referencia="2026-02-05")
+        painel = reverse("financas:painel", args=[self.conta.pk])
+        r = self.client.get(painel, {"mes": "2026-02", "dia": "2026-02-05"})
+        self.assertContains(r, "pulada neste mês")
+        p = PagamentoConta.objects.get(fixa=self.aluguel)
+        self.client.post(reverse("financas:pagamento_excluir", args=[p.pk]), {"voltar": "dia:2026-02-05"})
+        self.assertIn(date(2026, 2, 5), self.datas(self.aluguel))
+
+    def test_remarcar_conta_variavel_continua_prevista(self):
+        self.post("pagamento_registrar", self.luz, referencia="2026-01-20", situacao="remarcado",
+                  valor="140", data="2026-01-27")
+        e = eventos_fixa(ContaFixa.objects.get(pk=self.luz.pk), date(2026, 1, 1), date(2026, 1, 31))[0]
+        self.assertEqual((e.data, e.valor, e.estimado), (date(2026, 1, 27), Decimal("140"), True))
+        self.assertIn(date(2026, 1, 27), [d for d, _ in proximas_fixas(self.conta, date(2026, 1, 21), 10)])
+
+    def test_tela_do_dia_oferece_remarcar_e_pular(self):
+        painel = reverse("financas:painel", args=[self.conta.pk])
+        r = self.client.get(painel, {"mes": "2026-01", "dia": "2026-01-10"})
+        self.assertContains(r, "Não aconteceu nesse dia?")
+        self.assertContains(r, "Pular desta vez")
+        r = self.client.get(painel, {"mes": "2026-01", "dia": "2026-01-05"})
+        self.assertContains(r, "Pular neste mês")

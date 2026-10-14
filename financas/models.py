@@ -408,12 +408,23 @@ class AssinaturaCartao(models.Model):
 
 
 class PagamentoConta(models.Model):
-    """Valor real pago (ou recebido) de uma conta variável em um mês."""
+    """O que aconteceu com uma ocorrência da conta fixa (um mês, ou uma vez da periódica).
+
+    pago: saiu (ou entrou) de fato, com valor e data reais; nas contas comuns é o ajuste do mês.
+    remarcado: ainda não aconteceu, mas vai em outra data/valor (continua previsto).
+    pulado: não acontece nesta ocorrência.
+    """
+
+    PAGO = "pago"
+    REMARCADO = "remarcado"
+    PULADO = "pulado"
+    SITUACOES = [(PAGO, "Pago"), (REMARCADO, "Remarcado"), (PULADO, "Pulado")]
 
     fixa = models.ForeignKey(ContaFixa, on_delete=models.CASCADE, related_name="pagamentos")
     referencia = models.DateField(help_text="Data de vencimento da ocorrência que foi paga.")
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data = models.DateField(help_text="Quando o dinheiro saiu (ou entrou) de fato.")
+    situacao = models.CharField(max_length=9, choices=SITUACOES, default=PAGO)
 
     class Meta:
         ordering = ["-referencia"]
@@ -423,6 +434,14 @@ class PagamentoConta(models.Model):
 
     def __str__(self):
         return f"{self.fixa.nome} {self.referencia:%m/%Y}: {self.valor}"
+
+    @property
+    def feito(self):
+        return self.situacao == self.PAGO
+
+    @property
+    def pulado(self):
+        return self.situacao == self.PULADO
 
 
 class Aporte(models.Model):

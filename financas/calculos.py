@@ -53,13 +53,27 @@ class EventoFixa:
     pagamento: object = None
 
     @property
+    def feito(self):
+        """Já aconteceu: marcada como paga/comprada (ou ajustada, nas contas comuns)."""
+        return self.pagamento is not None and self.pagamento.feito
+
+    @property
+    def remarcado(self):
+        """Ainda previsto, mas em outra data/valor só nesta ocorrência."""
+        return self.pagamento is not None and self.pagamento.situacao == self.pagamento.REMARCADO
+
+    @property
+    def pulado(self):
+        return self.pagamento is not None and self.pagamento.pulado
+
+    @property
     def estimado(self):
-        return self.fixa.variavel and self.pagamento is None
+        return self.fixa.variavel and not self.feito
 
     @property
     def ajustado(self):
         """Conta comum com valor/data alterados só nesta ocorrência."""
-        return self.pagamento is not None and not self.fixa.marcavel
+        return self.feito and not self.fixa.marcavel
 
     # mesmos nomes de uma conta fixa, para listas de vencimentos
     @property
@@ -75,51 +89,61 @@ def _fixas_ativas(conta):
     return conta.fixas.filter(ativa=True).prefetch_related("pagamentos")
 
 
-def _eventos_periodicos(fixa, inicio, fim):
+def _eventos_periodicos(fixa, inicio, fim, com_pulados=False):
     """Conta a cada N dias: cadeia de ocorrências a partir de fixa.proxima.
 
-    As compras marcadas são ligadas às ocorrências na ordem das datas; depois de cada
+    As compras feitas são ligadas às ocorrências na ordem das datas; depois de cada
     uma, a próxima ocorrência conta a partir da data real (comprou atrasado → a
-    seguinte também atrasa).
+    seguinte também atrasa). Remarcar e pular valem só para a ocorrência a que se
+    referem: remarcada, a seguinte conta da nova data; pulada, o ritmo continua.
     """
     intervalo = timedelta(days=fixa.intervalo_dias or 30)
-    pagos = sorted(fixa.pagamentos.all(), key=lambda p: (p.data, p.pk))
+    registros = list(fixa.pagamentos.all())
+    feitos = sorted((p for p in registros if p.feito), key=lambda p: (p.data, p.pk))
+    planos = {p.referencia: p for p in registros if not p.feito}
     ocorrencia = fixa.proxima or fixa.conta.data_inicio
     eventos, i = [], 0
-    while ocorrencia <= fim or i < len(pagos):
-        if i < len(pagos):
-            p = pagos[i]
+    while ocorrencia <= fim or i < len(feitos):
+        p = planos.pop(ocorrencia, None)
+        if p is None and i < len(feitos):
+            p = feitos[i]
             i += 1
-            data, valor, seguinte = p.data, p.valor, p.data + intervalo
+        if p is None:
+            data, valor = ocorrencia, fixa.valor
         else:
-            p = None
-            data, valor, seguinte = ocorrencia, fixa.valor, ocorrencia + intervalo
-        if inicio <= data <= fim:
+            data, valor = p.data, (ZERO if p.pulado else p.valor)
+        if inicio <= data <= fim and (com_pulados or p is None or not p.pulado):
             eventos.append(EventoFixa(fixa, data, valor, ocorrencia, p))
-        ocorrencia = seguinte
+        ocorrencia = data + intervalo
     return eventos
 
 
-def eventos_fixa(fixa, inicio, fim):
+def eventos_fixa(fixa, inicio, fim, com_pulados=False):
     """Ocorrências da conta fixa que mexem na conta entre inicio e fim (inclusive).
 
     Respeita o período de validade (vigente_desde / vigente_ate) pela data prevista.
+    Ocorrências puladas ficam de fora; com_pulados=True as inclui com valor zero
+    (para mostrar no dia em que seriam).
     """
-    eventos = _eventos_sem_vigencia(fixa, inicio, fim)
+    eventos = _eventos_sem_vigencia(fixa, inicio, fim, com_pulados)
     if fixa.vigente_desde is None and fixa.vigente_ate is None:
         return eventos
     return [e for e in eventos if fixa.vigente_em(e.vencimento)]
 
 
-def _eventos_sem_vigencia(fixa, inicio, fim):
+def _eventos_sem_vigencia(fixa, inicio, fim, com_pulados=False):
     if fixa.periodica:
-        return _eventos_periodicos(fixa, inicio, fim)
+        return _eventos_periodicos(fixa, inicio, fim, com_pulados)
     # Mensal (variável ou não): um pagamento/ajuste registrado para o mês substitui
     # o valor e a data daquele mês (o pagamento pode sair antes ou depois: folga de 2 meses).
     pagos = {(p.referencia.year, p.referencia.month): p for p in fixa.pagamentos.all()}
     eventos = []
     for d in _ocorrencias(fixa, inicio - timedelta(days=62), fim + timedelta(days=62)):
         p = pagos.get((d.year, d.month))
+        if p and p.pulado:
+            if com_pulados and inicio <= d <= fim:
+                eventos.append(EventoFixa(fixa, d, ZERO, d, p))
+            continue
         data, valor = (p.data, p.valor) if p else (d, fixa.valor)
         if inicio <= data <= fim:
             eventos.append(EventoFixa(fixa, data, valor, d, p))
@@ -262,7 +286,7 @@ def proximas_fixas(conta, hoje, quantidade=5):
     itens = []
     for fixa in _fixas_ativas(conta):
         for e in eventos_fixa(fixa, inicio, fim):
-            if e.pagamento is None or e.ajustado:   # pago sai da lista; ajustado continua
+            if not e.feito or e.ajustado:   # pago sai da lista; ajustado e remarcado continuam
                 itens.append((e.data, e))
     itens.sort(key=lambda x: x[0])
     return itens[:quantidade]
@@ -284,6 +308,7 @@ class Dia:
     ativo: bool                     # dentro do período calculado (>= data_inicio)
     inicio: Decimal = None          # saldo esperado no início do dia
     movimentos: list = field(default_factory=list)
+    pulados: list = field(default_factory=list)     # contas fixas que não acontecem nesta ocorrência
     entradas: Decimal = Decimal("0")
     saidas: Decimal = Decimal("0")
     gasto: Decimal = Decimal("0")   # dinheiro do dia a dia que conta como usado
@@ -330,9 +355,9 @@ def _dias_com_movimentos(conta, ano, mes, conferencias=True):
     por_data = {d.data: d for d in dias}
     inicio_mes = ativos[0].data
     for fixa in _fixas_ativas(conta):
-        for e in eventos_fixa(fixa, inicio_mes, ultimo):
-            por_data[e.data].movimentos.append(
-                Movimento(fixa.nome, e.valor, fixa.tipo == ContaFixa.RECEITA, "fixa", fixa, e))
+        for e in eventos_fixa(fixa, inicio_mes, ultimo, com_pulados=True):
+            m = Movimento(fixa.nome, e.valor, fixa.tipo == ContaFixa.RECEITA, "fixa", fixa, e)
+            (por_data[e.data].pulados if e.pulado else por_data[e.data].movimentos).append(m)
     for l in conta.lancamentos.filter(data__gte=inicio_mes, data__lte=ultimo):
         por_data[l.data].movimentos.append(
             Movimento(l.descricao, l.valor, l.tipo == Lancamento.ENTRADA, "lancamento", l))

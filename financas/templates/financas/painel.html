@@ -95,6 +95,18 @@
             <small>{% if dia.itens %}{{ dia.itens|length }} gasto{{ dia.itens|length|pluralize }} lançado{{ dia.itens|length|pluralize }}{% elif dia.uso.situacao == "nada" %}não usado{% elif dia.uso.situacao == "parte" %}usado em parte{% elif dia.uso %}usado{% elif dia.data > hoje %}previsto{% else %}não informado, conta como usado{% endif %}</small></dt>
           <dd class="neg">− {{ dia.gasto|brl }}</dd>
         </div>
+        {% for m in dia.pulados %}
+        <div class="mov pulado">
+          <dt><span class="pulado-nome">{{ m.nome }}</span>
+            <small>{% if m.objeto.periodica %}pulado desta vez{% else %}pulada neste mês{% endif %} · não entra nas contas</small>
+            <form method="post" action="{% url 'financas:pagamento_excluir' m.evento.pagamento.pk %}" class="pago-linha">{% csrf_token %}
+              <input type="hidden" name="voltar" value="dia:{{ dia.data|date:'Y-m-d' }}">
+              <span class="ajuste-selo">pulado</span>
+              <button type="submit" class="acao-item">Desfazer</button>
+            </form></dt>
+          <dd><s>{{ m.objeto.valor|brl }}</s></dd>
+        </div>
+        {% endfor %}
         <div class="total"><dt>Saldo esperado ao fim do dia</dt><dd class="{% if dia.esperado < 0 %}neg{% endif %}">{{ dia.esperado|brl }}</dd></div>
       </dl>
 
@@ -522,7 +534,9 @@
                 {% if i.ultima_compra %}<span class="rotulo"> · última: {{ i.ultima_compra.valor|brl }} em {{ i.ultima_compra.data|date:"d/m" }}</span>{% endif %}
               </small>
             {% elif i.obj.variavel and not i.inativa %}
-              {% if i.pagamento_mes %}
+              {% if i.pulado_mes %}
+              <small class="pago-mes">{{ hoje|date:"F"|capfirst }}: pulada · <a href="?mes={{ i.pulado_mes.referencia|date:'Y-m' }}&dia={{ i.pulado_mes.referencia|date:'Y-m-d' }}#extrato">desfazer</a></small>
+              {% elif i.pagamento_mes %}
               <small class="pago-mes">✓ {{ hoje|date:"F"|lower }}: {% if i.receita %}recebido{% else %}pago{% endif %} {{ i.pagamento_mes.valor|brl }} em {{ i.pagamento_mes.data|date:"d/m" }}</small>
               {% else %}
               <small class="a-pagar"><a href="?mes={{ i.vencimento_mes|date:'Y-m' }}&dia={{ i.vencimento_mes|date:'Y-m-d' }}#extrato">{% if i.receita %}Marcar {{ hoje|date:"F"|lower }} como recebido{% else %}Pagar {{ hoje|date:"F"|lower }}{% endif %} →</a></small>

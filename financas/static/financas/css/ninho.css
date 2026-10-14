@@ -1224,6 +1224,11 @@ html[data-tema="escuro"] .logo img { box-shadow: 0 0 0 1px rgba(255, 255, 255, .
 .ajuste-mes { margin-top: 4px; }
 .ajuste-mes summary { list-style: none; display: inline; }
 .ajuste-mes summary::-webkit-details-marker { display: none; }
+.ajuste-mes[open] summary { display: block; margin-bottom: 2px; }
+.ajuste-nota { margin: 4px 0 0; font-size: .75rem; color: var(--muted); }
+.pular-form { margin-top: 6px; }
+.mov.pulado .pulado-nome { color: var(--muted); text-decoration: line-through; }
+.mov.pulado dd { color: var(--muted); font-weight: 500; }
 .ajuste-selo { font-size: .72rem; font-weight: 700; color: var(--azul-txt); background: var(--azul-bg); padding: 1px 8px; border-radius: 99px; }
 
 /* encerrar / mudar fim */

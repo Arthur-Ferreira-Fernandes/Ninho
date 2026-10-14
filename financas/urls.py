@@ -29,6 +29,7 @@ urlpatterns = [
     path("contas/<int:pk>/gastos-do-dia/", views.gasto_dia_adicionar, name="gasto_dia_adicionar"),
     path("gastos-do-dia/<int:gasto_pk>/excluir/", views.gasto_dia_excluir, name="gasto_dia_excluir"),
     path("fixas/<int:fixa_pk>/pagamento/", views.pagamento_registrar, name="pagamento_registrar"),
+    path("fixas/<int:fixa_pk>/pular/", views.ocorrencia_pular, name="ocorrencia_pular"),
     path("fixas/<int:fixa_pk>/encerrar/", views.fixa_encerrar, name="fixa_encerrar"),
     path("assinaturas/<int:assinatura_pk>/encerrar/", views.assinatura_encerrar, name="assinatura_encerrar"),
     path("contas/<int:pk>/guardado/confirmar/", views.aporte_confirmar, name="aporte_confirmar"),
