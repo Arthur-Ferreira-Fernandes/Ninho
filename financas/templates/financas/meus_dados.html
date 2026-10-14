@@ -67,6 +67,20 @@
       <ol><li>Toque em <b>Compartilhar</b>.</li><li>Escolha <b>Adicionar à Tela de Início</b>.</li></ol>
       <h3>Android (Chrome)</h3>
       <ol><li>Toque no menu <b>⋮</b>.</li><li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li></ol>
+      <h3>Computador</h3>
+      <p class="rotulo" style="margin:4px 0 0">Chrome e Edge: botão acima ou ícone de instalar na barra de endereço. Mac: Safari → Arquivo → Adicionar ao Dock.</p>
+    </div>
+    <div class="card app-card" id="outros-aparelhos">
+      <h2 style="margin:0;font-size:1rem">Outros aparelhos</h2>
+      {% if endereco_remoto %}
+      <p class="rotulo" style="margin:6px 0 0">Nos aparelhos com o Tailscale conectado na sua conta, abra:</p>
+      <p class="endereco-copiar"><code>{{ endereco_remoto }}</code> <button type="button" class="btn sec" data-copiar="{{ endereco_remoto }}">Copiar</button></p>
+      <p class="rotulo" style="margin:0">Entre com o seu usuário e use “Instalar app”. Este computador precisa estar ligado com o {{ marca.nome }} aberto.</p>
+      {% else %}
+      <p class="rotulo" style="margin:6px 0 0">Os dados ficam neste computador. Para abrir e instalar o {{ marca.nome }} em outros computadores e celulares, conecte este computador e os outros aparelhos ao <b>Tailscale</b> (uma rede privada, grátis para uso pessoal) e rode uma vez, neste computador:</p>
+      <p class="endereco-copiar"><code>desktop/acesso_remoto.sh</code></p>
+      <p class="rotulo" style="margin:0">Depois, reabra o {{ marca.nome }}: o endereço para os outros aparelhos aparece aqui.</p>
+      {% endif %}
     </div>
   </aside>
 </div>

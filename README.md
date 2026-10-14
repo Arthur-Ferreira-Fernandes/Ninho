@@ -142,3 +142,17 @@ echo "$HOME/Dropbox/ninho" > ~/.local/share/ninho/pasta_backup_extra
 ```
 
 Para restaurar: feche o programa e copie a cópia escolhida por cima de `~/.local/share/ninho/db.sqlite3`.
+
+### Usar e instalar em outros aparelhos (Tailscale)
+
+Os dados continuam neste computador. O [Tailscale](https://tailscale.com) (grátis para uso pessoal) liga os seus
+aparelhos numa rede privada e publica o Ninho em `https://<este-computador>.<sua-rede>.ts.net`, um endereço com
+HTTPS válido que só os seus aparelhos enxergam. Com HTTPS, o "Instalar app" funciona em qualquer computador ou celular.
+
+1. Neste computador, uma vez: `desktop/acesso_remoto.sh` (instala o Tailscale, conecta à sua conta e publica a
+   porta 8003). Se pedir para liberar HTTPS na conta, confirme pelo link e rode de novo.
+2. Reabra o Ninho: ao abrir, ele reconhece o Tailscale, libera o endereço e mostra em **Meus dados → Outros aparelhos**.
+3. Nos outros aparelhos: instale o Tailscale, entre com a mesma conta (ou convide a pessoa para a sua rede),
+   abra o endereço, entre com o usuário do Ninho e clique em **Instalar app**.
+
+Este computador precisa estar ligado com o Ninho aberto para os outros aparelhos acessarem.

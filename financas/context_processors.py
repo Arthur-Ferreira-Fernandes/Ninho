@@ -2,7 +2,7 @@ from django.conf import settings
 
 
 def marca(request):
-    return {"marca": settings.MARCA}
+    return {"marca": settings.MARCA, "endereco_remoto": settings.ENDERECO_REMOTO}
 
 
 TEMAS = ("escuro", "claro")

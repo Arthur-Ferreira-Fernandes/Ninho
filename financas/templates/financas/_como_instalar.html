@@ -1,0 +1,42 @@
+<dialog class="dialogo" id="como-instalar" aria-labelledby="como-instalar-titulo">
+  <form method="dialog" class="dialogo-fechar"><button type="submit" class="btn fantasma" aria-label="Fechar">×</button></form>
+  <h2 id="como-instalar-titulo">Instalar o {{ marca.nome }}</h2>
+
+  <div data-caso="inseguro" hidden>
+    <p>Este endereço não tem HTTPS, e os navegadores só instalam apps a partir de endereços seguros.</p>
+    {% if endereco_remoto %}
+    <p>Abra este endereço neste aparelho e instale por lá:</p>
+    <p class="endereco-copiar"><code>{{ endereco_remoto }}</code> <button type="button" class="btn sec" data-copiar="{{ endereco_remoto }}">Copiar</button></p>
+    {% else %}
+    <p>Para usar e instalar em outros aparelhos, configure o acesso pelo Tailscale. Veja <a href="{% url 'financas:meus_dados' %}#outros-aparelhos">Meus dados → Outros aparelhos</a>.</p>
+    {% endif %}
+  </div>
+
+  <div data-caso="chrome" hidden>
+    <p>No Chrome ou no Edge do computador:</p>
+    <ol>
+      <li>Clique no ícone de <b>instalar</b> no fim da barra de endereço (um monitor com uma seta, ou ⊕).</li>
+      <li>Se ele não aparecer: menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar</b> → <b>Instalar página como app</b>. No Edge: menu <b>…</b> → <b>Apps</b> → <b>Instalar este site como um aplicativo</b>.</li>
+    </ol>
+    <p class="rotulo">Se o app já estiver instalado neste computador, abra-o pelo menu de aplicativos ou pelo ícone na área de trabalho.</p>
+  </div>
+
+  <div data-caso="android" hidden>
+    <ol><li>Toque no menu <b>⋮</b> do navegador.</li><li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li></ol>
+  </div>
+
+  <div data-caso="ios" hidden>
+    <ol><li>Toque em <b>Compartilhar</b> (o quadrado com a seta para cima).</li><li>Escolha <b>Adicionar à Tela de Início</b>.</li></ol>
+    <p class="rotulo">No iPhone e no iPad, isso funciona no Safari (e também no Chrome, nas versões recentes do iOS).</p>
+  </div>
+
+  <div data-caso="safari" hidden>
+    <ol><li>No Safari, abra o menu <b>Arquivo</b> (ou o botão <b>Compartilhar</b>).</li><li>Escolha <b>Adicionar ao Dock</b>.</li></ol>
+    <p class="rotulo">Precisa do macOS Sonoma (14) ou mais recente. Em versões anteriores, use o Chrome ou o Edge.</p>
+  </div>
+
+  <div data-caso="firefox" hidden>
+    <p>O Firefox do computador não instala sites como app. Abra este mesmo endereço no <b>Chrome</b>, no <b>Edge</b> ou no <b>Safari</b> e clique em “Instalar app” de novo.</p>
+    <p class="endereco-copiar"><code data-endereco-atual></code> <button type="button" class="btn sec" data-copiar>Copiar</button></p>
+  </div>
+</dialog>

@@ -26,5 +26,6 @@
     {% for m in messages %}<div class="aviso {{ m.tags }}">{{ m }}</div>{% endfor %}
     {% block conteudo %}{% endblock %}
   </main>
+  {% if user.is_authenticated %}{% include "financas/_como_instalar.html" %}{% endif %}
 </body>
 </html>

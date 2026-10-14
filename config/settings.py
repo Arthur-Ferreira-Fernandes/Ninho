@@ -172,6 +172,9 @@ LOGIN_REDIRECT_URL = "financas:inicio"
 LOGOUT_REDIRECT_URL = "financas:entrar"
 
 # Identidade da marca (usada em todos os templates via context processor)
+# Programa do computador com Tailscale: o endereço https para abrir (e instalar) nos outros aparelhos
+ENDERECO_REMOTO = os.environ.get("NINHO_ENDERECO_REMOTO", "")
+
 MARCA = {
     "nome": "Ninho",
     "slogan": "As finanças da sua família, no mesmo lugar.",

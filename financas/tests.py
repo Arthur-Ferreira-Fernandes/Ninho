@@ -2144,7 +2144,7 @@ class DetalhesDoMesTests(TestCase):
         r = self.client.get(self.painel, {"mes": "2026-01"})
         url = reverse("financas:mes_detalhes", args=[self.conta.pk]) + "?mes=2026-01"
         self.assertContains(r, f'href="{url}"')
-        self.assertNotContains(r, "<dialog")
+        self.assertNotContains(r, 'id="detalhes-mes"')   # a antiga janela de detalhes virou página
 
     def test_pagina_do_mes(self):
         url = reverse("financas:mes_detalhes", args=[self.conta.pk])

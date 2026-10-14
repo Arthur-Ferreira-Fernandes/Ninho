@@ -18,20 +18,52 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("{% url 'financas:service_worker' %}").catch(() => {}));
     }
-    // Android/Chrome: guarda o convite de instalação para o botão "Instalar app"
+    // "Instalar app": no Chrome/Edge usa o convite do navegador; nos demais (ou sem HTTPS),
+    // abre o passo a passo certo para o navegador em uso
+    const jaInstalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    const botoesInstalar = (visivel) => document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = !visivel));
     window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       window.convitePWA = e;
-      document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = false));
+      botoesInstalar(true);
     });
-    function instalarApp() {
-      if (!window.convitePWA) return;
-      window.convitePWA.prompt();
-      window.convitePWA.userChoice.finally(() => {
-        window.convitePWA = null;
-        document.querySelectorAll("[data-instalar]").forEach((b) => (b.hidden = true));
-      });
+    window.addEventListener("appinstalled", () => botoesInstalar(false));
+    document.addEventListener("DOMContentLoaded", () => botoesInstalar(!jaInstalado()));
+
+    function casoDeInstalacao() {
+      const ua = navigator.userAgent;
+      if (!window.isSecureContext) return "inseguro";
+      if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+      if (/Android/.test(ua)) return "android";
+      if (/Firefox\//.test(ua)) return "firefox";
+      if (/Safari\//.test(ua) && !/Chrome\/|Chromium\/|Edg\//.test(ua)) return "safari";
+      return "chrome";
     }
+    function instalarApp() {
+      if (window.convitePWA) {
+        window.convitePWA.prompt();
+        window.convitePWA.userChoice.then((escolha) => {
+          if (escolha.outcome === "accepted") botoesInstalar(false);
+        }).finally(() => { window.convitePWA = null; });
+        return;
+      }
+      const dialogo = document.getElementById("como-instalar");
+      if (!dialogo) return;
+      const caso = casoDeInstalacao();
+      dialogo.querySelectorAll("[data-caso]").forEach((d) => (d.hidden = d.dataset.caso !== caso));
+      dialogo.querySelectorAll("[data-endereco-atual]").forEach((c) => (c.textContent = location.origin + "/"));
+      dialogo.showModal();
+    }
+    // botões "Copiar" (endereços para abrir em outro navegador ou aparelho)
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-copiar]");
+      if (!b) return;
+      navigator.clipboard.writeText(b.dataset.copiar || location.origin + "/").then(() => {
+        const antes = b.textContent;
+        b.textContent = "Copiado!";
+        setTimeout(() => (b.textContent = antes), 1500);
+      });
+    });
 
     // troca o tema na hora e guarda a escolha por 1 ano (o servidor lê o cookie)
     function trocarTema() {
