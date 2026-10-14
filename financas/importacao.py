@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 
 from .calculos import ZERO, dia_de_guardar, eventos_fixa, faturas
 from .categorias import normalizar
-from .models import Aporte, ContaFixa, GastoDia, Lancamento, PagamentoConta
+from .models import Aporte, ContaFixa, GastoDia, Lancamento, PagamentoConta, Resgate
 
 TAMANHO_MAXIMO = 2 * 1024 * 1024
 
@@ -183,6 +183,7 @@ def ler_arquivo(nome, conteudo):
 
 PALAVRAS_GUARDAR = ["aplicacao", "aplic", "poupanca", "investimento", "invest", "cdb", "tesouro", "lci", "lca",
                     "caixinha", "porquinho", "cofrinho", "guardar dinheiro"]
+PALAVRAS_RESGATE = ["resgate", "resg ", "resg.", "retirada caixinha", "resgate cdb", "resgate poupanca"]
 PALAVRAS_FATURA = ["fatura", "pagamento cartao", "pag cartao", "pgto cartao", "cartao de credito"]
 
 
@@ -204,6 +205,7 @@ def sugerir(conta, transacoes, hoje):
         eventos, lista_faturas = [], []
     usados = set()
     aportes = set(Aporte.objects.filter(conta=conta).values_list("data", "valor"))
+    resgates = set(Resgate.objects.filter(conta=conta).values_list("data", "valor"))
     limite_gasto = conta.orcamento_mensal * Decimal("0.3") if conta.orcamento_mensal > 0 else Decimal("300")
 
     for t in transacoes:
@@ -251,6 +253,14 @@ def sugerir(conta, transacoes, hoje):
                 t.acao, t.motivo = "guardado", "parece uma aplicação"
             continue
 
+        # dinheiro que volta dos investimentos
+        if not t.saida and (t.data, t.absoluto) in resgates:
+            t.acao, t.motivo = "ignorar", "já registrado como retirada dos investimentos"
+            continue
+        if not t.saida and any(p in texto + " " for p in PALAVRAS_RESGATE):
+            t.acao, t.motivo = "resgate", "parece dinheiro tirado dos investimentos"
+            continue
+
         if t.saida:
             t.acao = "gasto" if t.absoluto <= limite_gasto else "saida"
             t.motivo = "gasto do dia a dia" if t.acao == "gasto" else "valor alto: lançamento avulso"
@@ -285,7 +295,7 @@ def _opcoes(conta, t):
         if conta.guardar_mensal_em(mes) > 0:
             opcoes.append((f"confirmar:{mes.isoformat()}", f"Guardado do mês ({mes:%m/%Y})"))
     else:
-        opcoes = [("entrada", "Entrada avulsa (lançamento)")]
+        opcoes = [("entrada", "Entrada avulsa (lançamento)"), ("resgate", "Tirado dos investimentos")]
     return opcoes + [("ignorar", "Ignorar")]
 
 
@@ -320,6 +330,8 @@ def aplicar(conta, transacoes, escolhas, categorias, hoje):
         elif acao == "entrada" and not t.saida:
             Lancamento.objects.create(conta=conta, data=t.data, descricao=t.descricao, valor=t.absoluto,
                                       tipo=Lancamento.ENTRADA, id_externo=t.id_externo)
+        elif acao == "resgate" and not t.saida:
+            Resgate.objects.create(conta=conta, data=t.data, valor=t.absoluto, motivo=t.descricao[:200])
         elif acao == "guardado" and t.saida:
             Aporte.objects.create(conta=conta, tipo=Aporte.AVULSO, data=t.data, valor=t.absoluto,
                                   descricao=t.descricao[:120], objetivo=conta.objetivos.filter(padrao=True).first())

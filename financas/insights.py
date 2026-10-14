@@ -188,6 +188,10 @@ def variacoes(linhas, minimo=Decimal("30")):
 # Poupança: taxa por mês e sequência de meses guardando
 # ---------------------------------------------------------------------------
 
+def resgatado_no_mes(conta, mes):
+    return sum((r.valor for r in conta.resgates.filter(data__gte=mes, data__lte=ultimo_dia(mes))), ZERO)
+
+
 def _guardado_do_mes(conta, mes):
     """(valor guardado no mês, situação): mensal pela referência + avulsos feitos no mês."""
     mensal = dia_de_guardar(conta, mes.year, mes.month)
@@ -212,16 +216,20 @@ def historico_poupanca(conta, hoje, meses=12):
     while mes <= atual:
         t = totais_do_mes(extrato(conta, mes))
         guardado, situacao, avulsos = _guardado_do_mes(conta, mes)
-        recebido = t["recebido"] if t else ZERO
+        # o que foi tirado dos investimentos não é renda nem poupança: sai dos dois lados
+        resgatado = resgatado_no_mes(conta, mes)
+        recebido = (t["recebido"] if t else ZERO) - resgatado
+        liquido = guardado - resgatado
         linhas.append({
             "mes": mes, "atual": mes == atual, "completo": mes_completo(conta, mes),
-            "recebido": recebido, "guardado": guardado, "avulsos": avulsos, "situacao": situacao,
-            "taxa": round(guardado * 100 / recebido, 1) if recebido else None,
+            "recebido": recebido, "guardado": liquido, "avulsos": avulsos, "resgatado": resgatado,
+            "situacao": situacao,
+            "taxa": round(liquido * 100 / recebido, 1) if recebido > 0 else None,
         })
         mes = somar_meses(mes, 1)
     maior = max((l["taxa"] or 0 for l in linhas), default=0)
     for l in linhas:
-        l["altura"] = float((l["taxa"] or 0) * 100 / maior) if maior else 0
+        l["altura"] = float(max(l["taxa"] or 0, 0) * 100 / maior) if maior > 0 else 0
     fechados = [l for l in linhas if not l["atual"] and l["completo"] and l["taxa"] is not None
                 and l["situacao"] != "previsto"]
     ultimos = fechados[-6:]
@@ -302,10 +310,16 @@ def fechamento(conta, mes, hoje, categorias):
         if l["pct_limite"] is not None and l["pct_limite"] >= 100:
             sugestoes.append({"tipo": "limite", "texto": f"{l['nome']} passou do limite: {_brl(l['total'])} "
                               f"de {_brl(l['limite'])}."})
-    if totais["recebido"] > 0:
-        taxa = guardado * 100 / totais["recebido"]
+    resgatado = resgatado_no_mes(conta, mes)
+    if resgatado:
+        reposicao = (resgatado / 6).quantize(Decimal("1"))
+        sugestoes.append({"tipo": "resgate", "texto": f"Neste mês saíram {_brl(resgatado)} dos investimentos. "
+                          f"Para repor em 6 meses, guarde {_brl(reposicao)} a mais por mês."})
+    recebido_sem_resgate = totais["recebido"] - resgatado
+    if recebido_sem_resgate > 0:
+        taxa = (guardado - resgatado) * 100 / recebido_sem_resgate
         if taxa < 10:
-            dez = (totais["recebido"] / 10).quantize(Decimal("1"))
+            dez = (recebido_sem_resgate / 10).quantize(Decimal("1"))
             sugestoes.append({"tipo": "taxa", "texto": f"Você guardou {taxa:.0f}% do que entrou. Guardar 10% "
                               f"seriam {_brl(dez)} por mês."})
     return {
@@ -526,6 +540,12 @@ def alertas(conta, hoje, categorias, cats_atual=None):
         lista.append({"nivel": "info", "ancora": "assinaturas",
                       "titulo": f"{len(revisar)} assinatura{'s' if len(revisar) > 1 else ''} para revisar",
                       "texto": f"Somam {_brl(anual)} por ano. Ainda usa todas?"})
+
+    tirado = resgatado_no_mes(conta, primeiro_dia(hoje))
+    if tirado:
+        lista.append({"nivel": "info", "ancora": "poupanca",
+                      "titulo": f"{_brl(tirado)} tirados dos investimentos este mês",
+                      "texto": "Entraram na conta como recebimento. Vale planejar como repor."})
 
     lib = liberacoes(conta, hoje)
     if lib["ja"]:

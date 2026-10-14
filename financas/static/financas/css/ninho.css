@@ -1943,3 +1943,12 @@ html[data-tema="escuro"] .resumo-milhas dd { color: var(--serie-investido); }
   .fatura-proximas { position: static; }
 }
 @media (max-width: 520px) { .milhas-linha { grid-template-columns: 1fr; } .fatura-kpis { grid-template-columns: 1fr; } }
+
+/* retirada dos investimentos (resgate) */
+.invest-coluna { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.invest-coluna .card { margin: 0; }
+.resgate-card { scroll-margin-top: 80px; }
+.etiqueta-resgate { background: var(--neg-bg); color: var(--neg-txt); }
+.investimentos-tabela tr.sit-resgate td { background: var(--neg-bg); }
+.resgate-card .atalhos { margin-top: 8px; }
+.avulso-form select { width: 100%; padding: 11px 12px; }

@@ -31,6 +31,7 @@
     <a href="{% url 'financas:compra_nova' c.pk %}"><span class="acao-icone">▭</span><b>Compra no cartão</b><small>à vista ou parcelada</small></a>
     <a href="{% url 'financas:fixa_nova' c.pk %}"><span class="acao-icone">↻</span><b>Conta fixa</b><small>todo mês ou a cada X dias</small></a>
     <a href="{% url 'financas:painel' c.pk %}#investimentos"><span class="acao-icone">★</span><b>Guardar dinheiro</b><small>do mês ou avulso</small></a>
+    <a href="{% url 'financas:painel' c.pk %}#resgate"><span class="acao-icone">↩</span><b>Tirar do guardado</b><small>usar dinheiro investido</small></a>
     <a href="{% url 'financas:importar' c.pk %}"><span class="acao-icone">⇪</span><b>Importar extrato</b><small>OFX ou CSV do banco</small></a>
   </div>
   <div class="acoes-links">
@@ -48,7 +49,7 @@
   function marcar() {
     let atual = null;
     if (location.pathname === analise) atual = "analise";
-    else if (location.pathname === painel) atual = (location.hash.slice(1) || "extrato").replace("gasto", "extrato");
+    else if (location.pathname === painel) atual = (location.hash.slice(1) || "extrato").replace("gasto", "extrato").replace("resgate", "investimentos");
     document.querySelectorAll(".nav-inferior [data-nav]").forEach((a) => {
       if (a.dataset.nav === atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });

@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 
 from .templatetags.dinheiro import brl
 from .models import (Aporte, Categoria, GastoDia, AssinaturaCartao, Cartao, CompraCartao, PagamentoConta, Conferencia,
-                     ConferenciaInvestimento, Conta, ContaFixa, Familia, Lancamento, Objetivo, UsoDiario)
+                     ConferenciaInvestimento, Conta, ContaFixa, Familia, Lancamento, Objetivo, Resgate, UsoDiario)
 
 DATA = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
@@ -866,3 +866,33 @@ class ConferenciaInvestimentoForm(forms.ModelForm):
         if valor < 0:
             raise forms.ValidationError("O valor não pode ser negativo.")
         return valor
+
+
+class ResgateForm(forms.ModelForm):
+    """Dinheiro tirado dos investimentos: entra na conta e sai do que foi guardado."""
+
+    class Meta:
+        model = Resgate
+        fields = ["data", "valor", "motivo", "objetivo"]
+
+    def __init__(self, *args, conta, **kwargs):
+        self.conta = conta
+        super().__init__(*args, **kwargs)
+        self.fields["objetivo"].queryset = conta.objetivos.all()
+        self.fields["objetivo"].required = False
+        self.fields["motivo"].error_messages["required"] = "Informe o motivo da retirada."
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
+        if valor <= 0:
+            raise forms.ValidationError("Informe um valor maior que zero.")
+        return valor
+
+    def clean_data(self):
+        data = self.cleaned_data["data"]
+        if data < self.conta.data_inicio:
+            raise forms.ValidationError("A data é anterior ao início do cálculo da conta.")
+        return data
+
+    def clean_motivo(self):
+        return " ".join(self.cleaned_data["motivo"].split())

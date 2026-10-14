@@ -327,6 +327,7 @@ def importar_revisar(request, pk):
             resumo = importacao.aplicar(conta, transacoes, escolhas, categorias, hoje)
         del request.session[_chave_importacao(conta)]
         nomes = {"gasto": "gastos do dia", "saida": "saídas", "entrada": "entradas", "guardado": "guardados avulsos",
+                 "resgate": "retiradas dos investimentos",
                  "confirmar": "meses de guardado confirmados", "pagar": "pagamentos de contas"}
         partes = [f"{n} {nomes[k]}" for k, n in resumo.items()]
         messages.success(request, ("Importado: " + ", ".join(partes) + ".") if partes else "Nada foi importado.")

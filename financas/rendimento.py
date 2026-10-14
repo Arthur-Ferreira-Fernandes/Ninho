@@ -41,6 +41,10 @@ def entradas(conta, ate):
     for g in guardados(conta, conta.data_inicio, ate):
         if g.valor > 0 and (inicio is None or g.data > inicio):
             itens.append((g.data, g.valor, g.nome))
+    # o que foi tirado sai da carteira (e deixa de render) a partir do dia da retirada
+    for r in conta.resgates.filter(data__lte=ate):
+        if inicio is None or r.data > inicio:
+            itens.append((r.data, -r.valor, r.nome))
     itens.sort(key=lambda i: i[0])
     return itens
 
@@ -110,9 +114,10 @@ def mes_a_mes(conta, hoje, itens, conferencias, meses):
         antes = mes - timedelta(days=1)
         inicio = valor_em(conta, antes, itens)
         esperado = valor_em(conta, fim, itens)
-        entrou = sum((v for d, v, _ in itens if mes <= d <= fim), Decimal("0"))
+        entrou = sum((v for d, v, _ in itens if mes <= d <= fim and v > 0), Decimal("0"))
+        saiu = -sum((v for d, v, _ in itens if mes <= d <= fim and v < 0), Decimal("0"))
         conf = next((c for c in conferencias if mes <= c["obj"].data <= ultimo), None)
-        linhas.append({"mes": mes, "fim": fim, "parcial": fim < ultimo, "entrou": entrou,
-                       "rendeu": esperado - inicio - entrou, "esperado": esperado, "conferencia": conf})
+        linhas.append({"mes": mes, "fim": fim, "parcial": fim < ultimo, "entrou": entrou, "saiu": saiu,
+                       "rendeu": esperado - inicio - entrou + saiu, "esperado": esperado, "conferencia": conf})
         mes = (mes - timedelta(days=1)).replace(day=1)
     return linhas

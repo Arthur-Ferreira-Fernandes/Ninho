@@ -16,12 +16,12 @@ from django.views.decorators.http import require_POST
 from .calculos import (_somar_meses, fatura_a_pagar, fatura_do_cartao, detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
-from .forms import (CarteiraForm, ConferenciaInvestimentoForm, PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
+from .forms import (CarteiraForm, ConferenciaInvestimentoForm, ResgateForm, PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
                     LancamentoForm, PagamentosSalarioFormSet, UsoDiarioForm, UsuarioForm)
 from . import rendimento
 from .insights import alertas as alertas_analise, categorias_do_mes, projecao_objetivo
 from .templatetags.dinheiro import brl
-from .models import (Aporte, ConferenciaInvestimento, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
+from .models import (Aporte, ConferenciaInvestimento, Resgate, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Lancamento, Membro, PedidoEntrada, UsoDiario,
                      gerar_codigo_convite)
 
 # modelo da URL -> (Model, Form, título)
@@ -344,14 +344,14 @@ def _cartoes_com_proxima_fatura(conta, hoje):
 
 
 def _investimentos(conta, hoje, meses_a_frente=12):
-    """Histórico e previsão do que foi guardado (meses e avulsos), com o acumulado."""
-    if conta.guardar_modo == Conta.GUARDAR_NADA and not conta.aportes.exists():
+    """Histórico e previsão do que foi guardado (meses e avulsos) e tirado (resgates), com o acumulado."""
+    resgates = list(conta.resgates.select_related("objetivo"))
+    if conta.guardar_modo == Conta.GUARDAR_NADA and not conta.aportes.exists() and not resgates:
         return None
     ano_fim, mes_fim = divmod(hoje.year * 12 + hoje.month - 1 + meses_a_frente, 12)
     fim = date(ano_fim, mes_fim + 1, calendar.monthrange(ano_fim, mes_fim + 1)[1])
-    linhas, acumulado = [], Decimal("0")
+    linhas = []
     for g in guardados(conta, conta.data_inicio, fim):
-        acumulado += g.valor
         referencia = g.aporte.referencia if (g.aporte and not g.avulso) else g.data.replace(day=1)
         if g.avulso:
             situacao = "agendado" if g.data > hoje else "avulso"
@@ -363,10 +363,20 @@ def _investimentos(conta, hoje, meses_a_frente=12):
             situacao = "previsto"
         else:
             situacao = "pendente"      # mês que já começou e ainda não foi confirmado
-        linhas.append({"g": g, "data": g.data, "valor": g.valor, "acumulado": acumulado, "situacao": situacao,
-                       "referencia": referencia, "atual": referencia == hoje.replace(day=1) and not g.avulso})
+        linhas.append({"g": g, "resgate": None, "data": g.data, "valor": g.valor, "situacao": situacao,
+                       "mensal": not g.avulso, "referencia": referencia,
+                       "atual": referencia == hoje.replace(day=1) and not g.avulso})
+    for r in resgates:
+        if conta.data_inicio <= r.data <= fim:
+            linhas.append({"g": None, "resgate": r, "data": r.data, "valor": -r.valor, "situacao": "resgate",
+                           "mensal": False, "referencia": r.data.replace(day=1), "atual": False})
+    linhas.sort(key=lambda l: (l["data"], l["resgate"] is not None))
+    acumulado = Decimal("0")
+    for l in linhas:
+        acumulado += l["valor"]
+        l["acumulado"] = acumulado
     ate_hoje = [l for l in linhas if l["data"] <= hoje]
-    mensais_passados = [l for l in linhas if not l["g"].avulso and l["referencia"] <= hoje.replace(day=1)]
+    mensais_passados = [l for l in linhas if l["mensal"] and l["referencia"] <= hoje.replace(day=1)]
     return {
         "mensal": conta.guardar_mensal,
         "linhas": linhas,
@@ -375,8 +385,9 @@ def _investimentos(conta, hoje, meses_a_frente=12):
         "confirmados": sum(1 for l in mensais_passados if l["situacao"] == "confirmado"),
         "pendentes": sum(1 for l in mensais_passados if l["situacao"] == "pendente"),
         "nao_guardados": sum(1 for l in mensais_passados if l["situacao"] == "nao_guardado"),
-        "avulsos": sum((l["valor"] for l in linhas if l["g"].avulso and l["data"] <= hoje), Decimal("0")),
-        "proximo": next((l for l in linhas if l["data"] > hoje and not l["g"].avulso), None),
+        "avulsos": sum((l["valor"] for l in linhas if l["situacao"] == "avulso"), Decimal("0")),
+        "resgatado": sum((r.valor for r in resgates if r.data <= hoje), Decimal("0")),
+        "proximo": next((l for l in linhas if l["data"] > hoje and l["mensal"]), None),
     }
 
 
@@ -863,6 +874,36 @@ def aporte_excluir(request, aporte_pk):
     else:
         messages.success(request, f"Valor avulso de {brl(aporte.valor)} em {aporte.data:%d/%m} excluído.")
     aporte.delete()
+    return _aba_investimentos(conta)
+
+
+@require_POST
+@com_familia
+def resgate_novo(request, pk):
+    """Registra dinheiro tirado dos investimentos: entra na conta como recebimento e sai do guardado."""
+    conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
+    form = ResgateForm(request.POST, conta=conta, instance=Resgate(conta=conta))
+    if form.is_valid():
+        r = form.save()
+        messages.success(request, f"{brl(r.valor)} tirados dos investimentos em {r.data:%d/%m} ({r.motivo}). "
+                                  f"O valor entra na conta como recebimento de {r.data:%m/%Y}.")
+        if rendimento.configurada(conta):
+            saldo = rendimento.valor_esperado(conta, r.data)
+            if saldo < 0:
+                messages.warning(request, f"A retirada é maior que o esperado nos investimentos: ficariam {brl(saldo)}. "
+                                          "Confira o valor ou atualize o saldo investido.")
+    else:
+        _mostrar_erros(request, form)
+    return _aba(conta, "resgate")
+
+
+@require_POST
+@com_familia
+def resgate_excluir(request, resgate_pk):
+    r = get_object_or_404(Resgate, pk=resgate_pk, conta__familia=request.familia)
+    conta = r.conta
+    messages.success(request, f"Retirada de {brl(r.valor)} ({r.motivo}) excluída: sai da conta e volta para os investimentos.")
+    r.delete()
     return _aba_investimentos(conta)
 
 

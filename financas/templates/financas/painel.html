@@ -744,7 +744,7 @@
     <div class="kpi kpi-invest">
       <span class="rotulo">{% if carteira %}Guardado pelo app{% else %}Guardado até hoje{% endif %}</span>
       <strong>{{ investimentos.total_hoje|brl }}</strong>
-      <small class="rotulo">{{ investimentos.confirmados }} {% if investimentos.confirmados == 1 %}mês confirmado{% else %}meses confirmados{% endif %}{% if investimentos.nao_guardados %} · {{ investimentos.nao_guardados }} sem guardar{% endif %}{% if investimentos.avulsos %} · {{ investimentos.avulsos|brl }} avulso{% endif %}</small>
+      <small class="rotulo">{{ investimentos.confirmados }} {% if investimentos.confirmados == 1 %}mês confirmado{% else %}meses confirmados{% endif %}{% if investimentos.nao_guardados %} · {{ investimentos.nao_guardados }} sem guardar{% endif %}{% if investimentos.avulsos %} · {{ investimentos.avulsos|brl }} avulso{% endif %}{% if investimentos.resgatado %} · {{ investimentos.resgatado|brl }} tirado{% endif %}</small>
     </div>
     {% if not carteira %}
     <div class="kpi kpi-invest">
@@ -784,7 +784,15 @@
         <tr class="sit-{{ l.situacao }}{% if l.atual %} atual{% endif %}">
           <td class="data-curta"><a href="?mes={{ l.data|date:'Y-m' }}&dia={{ l.data|date:'Y-m-d' }}#extrato">{{ l.data|date:"d/m/y" }}</a></td>
           <td>
-            {% if l.g.avulso %}
+            {% if l.resgate %}
+              <strong>{{ l.resgate.motivo }}</strong>
+              <span class="etiqueta etiqueta-resgate">tirado{% if l.data > hoje %} (agendado){% endif %}</span>
+              {% if l.resgate.objetivo %}<small class="rotulo">de {{ l.resgate.objetivo.nome }}</small>{% endif %}
+              <form method="post" action="{% url 'financas:resgate_excluir' l.resgate.pk %}" class="inline"
+                    onsubmit="return confirm('Excluir a retirada de {{ l.resgate.valor|brl }} ({{ l.resgate.motivo|escapejs }})? Ela sai da conta e volta para os investimentos.')">{% csrf_token %}
+                <button type="submit" class="acao-item perigo-texto">Excluir</button>
+              </form>
+            {% elif l.g.avulso %}
               <strong>{{ l.g.aporte.descricao|default:"Valor avulso" }}</strong>
               <span class="etiqueta etiqueta-guardar">{% if l.situacao == "agendado" %}avulso agendado{% else %}avulso{% endif %}</span>
               <form method="post" action="{% url 'financas:aporte_excluir' l.g.aporte.pk %}" class="inline"
@@ -833,7 +841,7 @@
               {% endif %}
             {% endif %}
           </td>
-          <td class="num">{% if l.situacao == "nao_guardado" %}—{% else %}{{ l.valor|brl }}{% endif %}</td>
+          <td class="num{% if l.resgate %} neg{% endif %}">{% if l.situacao == "nao_guardado" %}—{% elif l.resgate %}− {{ l.resgate.valor|brl }}{% else %}{{ l.valor|brl }}{% endif %}</td>
           <td class="num"><b>{{ l.acumulado|brl }}</b></td>
         </tr>
         {% endfor %}
@@ -851,6 +859,7 @@
       {% endif %}
     </div>
 
+    <div class="invest-coluna">
     <div class="card avulso-card">
       <h2>Guardar um valor avulso</h2>
       <p class="rotulo" style="margin-top:0">Qualquer dia, qualquer quantia: um bônus, o 13º, uma sobra do mês.</p>
@@ -880,6 +889,45 @@
         {% endif %}
         <button type="submit" class="btn bloco">Guardar</button>
       </form>
+    </div>
+
+    <div class="card resgate-card" id="resgate">
+      <h2>Tirar dinheiro dos investimentos</h2>
+      <p class="rotulo" style="margin-top:0">Precisou usar o que estava guardado? O valor entra na conta como recebimento no dia e sai dos investimentos.</p>
+      <form method="post" action="{% url 'financas:resgate_novo' conta.pk %}" class="avulso-form">{% csrf_token %}
+        <div class="campo">
+          <label for="resgate-valor">Quanto tirou</label>
+          <div class="campo-input com-prefixo"><span class="prefixo">R$</span>
+            <input type="number" step="0.01" min="0" inputmode="decimal" name="valor" id="resgate-valor" placeholder="0,00" required>
+          </div>
+        </div>
+        <div class="campo">
+          <label for="resgate-data">Data</label>
+          <div class="campo-input"><input type="date" name="data" id="resgate-data" value="{{ hoje|date:'Y-m-d' }}" required></div>
+        </div>
+        <div class="campo">
+          <label for="resgate-motivo">Motivo</label>
+          <div class="campo-input"><input type="text" name="motivo" id="resgate-motivo" maxlength="200" required placeholder="Ex.: conserto do carro, conta do hospital"></div>
+          <div class="atalhos" aria-label="Sugestões de motivo">
+            <button type="button" data-motivo="Emergência">Emergência</button>
+            <button type="button" data-motivo="Conta inesperada">Conta inesperada</button>
+            <button type="button" data-motivo="Saúde">Saúde</button>
+            <button type="button" data-motivo="Conserto">Conserto</button>
+            <button type="button" data-motivo="Fechar o mês">Fechar o mês</button>
+          </div>
+        </div>
+        {% if objetivos %}
+        <div class="campo">
+          <label for="resgate-objetivo">Saiu de qual objetivo</label>
+          <select name="objetivo" id="resgate-objetivo">
+            <option value="">Nenhum em especial</option>
+            {% for p in objetivos %}<option value="{{ p.objetivo.pk }}">{{ p.objetivo.nome }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <button type="submit" class="btn bloco sec">Registrar retirada</button>
+      </form>
+    </div>
     </div>
   </div>
 
@@ -981,8 +1029,16 @@
     const abas = [...document.querySelectorAll(".abas .aba")];
     const paineis = [...document.querySelectorAll(".aba-painel")];
     function abrir(id, foco) {
-      if (!paineis.some((p) => p.id === id)) id = "extrato";
+      // #resgate, #objetivos, #carteira...: abre a aba que contém o elemento e rola até ele
+      let alvo = null;
+      if (!paineis.some((p) => p.id === id)) {
+        const el = id && document.getElementById(id);
+        const painel = el && el.closest(".aba-painel");
+        alvo = painel ? el : null;
+        id = painel ? painel.id : "extrato";
+      }
       paineis.forEach((p) => { p.hidden = p.id !== id; });
+      if (alvo) requestAnimationFrame(() => alvo.scrollIntoView({ block: "start" }));
       abas.forEach((a) => {
         const ativa = a.getAttribute("aria-controls") === id;
         a.setAttribute("aria-selected", ativa);
@@ -1022,6 +1078,13 @@
     focarGasto();
     window.addEventListener("hashchange", () => { abrir(location.hash.slice(1)); focarGasto(); });
   })();
+
+  // atalhos de motivo da retirada dos investimentos
+  document.querySelectorAll("[data-motivo]").forEach((b) => b.addEventListener("click", () => {
+    const campo = document.getElementById("resgate-motivo");
+    campo.value = b.dataset.motivo;
+    document.getElementById("resgate-valor").focus();
+  }));
 
   // escolher o dia pelo calendário do navegador
   const escolher = document.getElementById("escolher-dia");

@@ -6,6 +6,7 @@ Saldo esperado ao FINAL do dia `data`:
   - despesas fixas que venceram entre data_inicio e data
   - dinheiro do dia a dia usado nos dias decorridos (contando data_inicio e data)
   + entradas avulsas - saídas avulsas no período
+  + dinheiro tirado dos investimentos (resgates), que entra como recebimento
   - faturas de cartão que vencem no período (parcelas de compras + assinaturas)
   - valor guardado de cada mês, no dia de maior saldo daquele mês
 
@@ -267,6 +268,8 @@ def saldo_esperado(conta, data):
 
     lancs = conta.lancamentos.filter(data__gte=conta.data_inicio, data__lte=data)
     entradas = sum((l.valor for l in lancs if l.tipo == Lancamento.ENTRADA), Decimal("0"))
+    # dinheiro tirado dos investimentos entra na conta como recebimento
+    entradas += sum((r.valor for r in conta.resgates.filter(data__gte=conta.data_inicio, data__lte=data)), ZERO)
     saidas = sum((l.valor for l in lancs if l.tipo == Lancamento.SAIDA), Decimal("0"))
 
     total_faturas = sum((f.total for f in faturas(conta, conta.data_inicio, data)), ZERO)
@@ -363,6 +366,8 @@ def _dias_com_movimentos(conta, ano, mes, conferencias=True):
             Movimento(l.descricao, l.valor, l.tipo == Lancamento.ENTRADA, "lancamento", l))
     for f in faturas(conta, inicio_mes, ultimo):
         por_data[f.vencimento].movimentos.append(Movimento(f.nome, f.total, False, "fatura", f))
+    for r in conta.resgates.filter(data__gte=inicio_mes, data__lte=ultimo):
+        por_data[r.data].movimentos.append(Movimento(r.nome, r.valor, True, "resgate", r))
     if conferencias:
         for c in conta.conferencias.filter(data__gte=inicio_mes, data__lte=ultimo).order_by("data", "id"):
             por_data[c.data].conferencia = c  # a mais recente do dia prevalece
@@ -846,6 +851,8 @@ def _item_do_movimento(m, data, hoje):
         g = m.objeto
         detalhe = "valor avulso" if g.avulso else ("confirmado" if g.confirmado else "previsto no dia de maior saldo")
         return ItemDetalhe(data, m.nome, m.valor, detalhe, not g.avulso and not g.confirmado)
+    if m.origem == "resgate":
+        return ItemDetalhe(data, m.nome, m.valor, "tirado dos investimentos", data > hoje)
     return ItemDetalhe(data, m.nome, m.valor, "lançamento avulso", data > hoje)
 
 

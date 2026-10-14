@@ -49,7 +49,7 @@
     {% for l in carteira.meses %}
     <tr>
       <td><b>{{ l.mes|date:"M/Y"|capfirst }}</b>{% if l.parcial %} <small class="rotulo">até {{ l.fim|date:"d/m" }}</small>{% endif %}</td>
-      <td class="num">{% if l.entrou %}{{ l.entrou|brl }}{% else %}—{% endif %}</td>
+      <td class="num">{% if l.entrou %}{{ l.entrou|brl }}{% elif not l.saiu %}—{% endif %}{% if l.saiu %}<small class="bloco neg">− {{ l.saiu|brl }} tirado</small>{% endif %}</td>
       <td class="num pos">{% if l.rendeu %}+{{ l.rendeu|brl }}{% else %}—{% endif %}</td>
       <td class="num"><b>{{ l.esperado|brl }}</b></td>
       <td class="num">{% if l.conferencia %}{% with c=l.conferencia %}

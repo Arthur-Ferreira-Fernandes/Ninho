@@ -635,7 +635,8 @@ class Objetivo(models.Model):
 
     @property
     def guardado(self):
-        return self.valor_inicial + sum((a.valor for a in self.aportes.all()), Decimal("0"))
+        return (self.valor_inicial + sum((a.valor for a in self.aportes.all()), Decimal("0"))
+                - sum((r.valor for r in self.resgates.all()), Decimal("0")))
 
     @property
     def falta(self):
@@ -664,3 +665,30 @@ class ConferenciaInvestimento(models.Model):
 
     def __str__(self):
         return f"{self.data:%d/%m/%Y}: {self.valor}"
+
+
+class Resgate(models.Model):
+    """Dinheiro tirado dos investimentos para usar nas contas.
+
+    Na conta, entra como recebimento no dia; nos investimentos, sai do que foi guardado.
+    """
+
+    conta = models.ForeignKey(Conta, on_delete=models.CASCADE, related_name="resgates")
+    data = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    motivo = models.CharField(max_length=200)
+    objetivo = models.ForeignKey(Objetivo, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="resgates", help_text="De qual objetivo o dinheiro saiu (opcional).")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+        verbose_name = "resgate dos investimentos"
+        verbose_name_plural = "resgates dos investimentos"
+
+    def __str__(self):
+        return f"{self.data:%d/%m/%Y} {self.motivo}: {self.valor}"
+
+    @property
+    def nome(self):
+        return f"Resgate: {self.motivo}"

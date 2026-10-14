@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Aporte, Categoria, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, Objetivo, PedidoEntrada, UsoDiario
+from .models import Aporte, Categoria, GastoDia, AssinaturaCartao, PagamentoConta, Cartao, CompraCartao, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro, Objetivo, PedidoEntrada, Resgate, UsoDiario
 
 
 class MembroInline(admin.TabularInline):
@@ -88,3 +88,8 @@ class CategoriaAdmin(admin.ModelAdmin):
 @admin.register(Objetivo)
 class ObjetivoAdmin(admin.ModelAdmin):
     list_display = ["nome", "conta", "valor_alvo", "valor_inicial", "prazo", "padrao"]
+
+
+@admin.register(Resgate)
+class ResgateAdmin(admin.ModelAdmin):
+    list_display = ["data", "motivo", "valor", "objetivo", "conta"]

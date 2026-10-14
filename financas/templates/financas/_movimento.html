@@ -1,5 +1,11 @@
 {% load dinheiro %}
-        {% if m.origem == "guardar" %}
+        {% if m.origem == "resgate" %}
+        <div class="mov">
+          <dt><a href="#investimentos">{{ m.nome }}</a>
+            <small>tirado dos investimentos{% if m.objeto.objetivo %} · de {{ m.objeto.objetivo.nome }}{% endif %}</small></dt>
+          <dd class="pos">+ {{ m.valor|brl }}</dd>
+        </div>
+        {% elif m.origem == "guardar" %}
         <div class="mov">
           <dt><a href="#investimentos">{{ m.nome }}</a>
             <small>{% if m.objeto.avulso %}valor avulso{% elif m.objeto.confirmado %}confirmado por você{% else %}previsto para o dia de maior saldo de {{ mes|date:"F"|lower }}{% endif %}</small></dt>

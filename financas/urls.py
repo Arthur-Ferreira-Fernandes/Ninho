@@ -42,6 +42,8 @@ urlpatterns = [
     path("contas/<int:pk>/guardado/avulso/", views.aporte_avulso, name="aporte_avulso"),
     path("guardado/<int:aporte_pk>/excluir/", views.aporte_excluir, name="aporte_excluir"),
     path("contas/<int:pk>/investimentos/carteira/", views.carteira_salvar, name="carteira_salvar"),
+    path("contas/<int:pk>/investimentos/resgate/", views.resgate_novo, name="resgate_novo"),
+    path("investimentos/resgates/<int:resgate_pk>/excluir/", views.resgate_excluir, name="resgate_excluir"),
     path("contas/<int:pk>/investimentos/conferir/", views.investimento_conferir, name="investimento_conferir"),
     path("investimentos/conferencias/<int:conferencia_pk>/excluir/", views.investimento_conferencia_excluir,
          name="investimento_conferencia_excluir"),
