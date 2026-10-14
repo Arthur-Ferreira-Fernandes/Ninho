@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (detalhes_do_mes, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (detalhes_do_mes, fluxo_diario, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -464,12 +464,16 @@ def _compras_com_andamento(conta, hoje):
     return lista
 
 
-def _historico_meses(conta, hoje, mes_aberto, dias_mes_aberto, antes=6, depois=2):
-    """Recebido − gasto dos últimos meses, do atual e dos próximos (previsão)."""
+def _historico_meses(conta, hoje, mes_aberto, dias_mes_aberto, antes=6, depois=2, centro=None):
+    """Recebido − gasto dos últimos meses, do atual e dos próximos (previsão).
+
+    centro: mês em torno do qual a janela é montada (padrão: o mês de hoje).
+    """
     atual = hoje.replace(day=1)
+    centro = centro or atual
     linhas = []
     for k in range(-antes, depois + 1):
-        ano, mes = divmod(atual.year * 12 + atual.month - 1 + k, 12)
+        ano, mes = divmod(centro.year * 12 + centro.month - 1 + k, 12)
         primeiro = date(ano, mes + 1, 1)
         if date(ano, mes + 1, calendar.monthrange(ano, mes + 1)[1]) < conta.data_inicio:
             continue
@@ -496,6 +500,44 @@ def _resumo_mes(ativos, hoje):
         "dias": len(ativos),
         "encerrado": ativos[-1].data < hoje,
     }
+
+
+@com_familia
+def mes_detalhes(request, pk):
+    """Página do mês: recebido × gasto, com gráficos e todos os itens."""
+    conta = get_object_or_404(Conta, pk=pk, familia=request.familia)
+    hoje = date.today()
+    try:
+        ano, mes = map(int, request.GET["mes"].split("-"))
+        primeiro = date(ano, mes, 1)
+    except (KeyError, ValueError):
+        primeiro = hoje.replace(day=1)
+    dias = extrato_mes(conta, primeiro.year, primeiro.month)
+    detalhes = detalhes_do_mes(dias, hoje)
+    historico = _historico_meses(conta, hoje, primeiro, dias, antes=5, depois=2, centro=primeiro)
+
+    def numero(v):
+        return float(v) if v is not None else None
+
+    grafico = {
+        "hoje": hoje.isoformat(),
+        "dias": fluxo_diario(dias, hoje),
+        "meses": [{"mes": l["mes"].strftime("%Y-%m"), "recebido": numero(l["recebido"]), "gasto": numero(l["gasto"]),
+                   "guardado": numero(l["guardado"]), "sobra": numero(l["sobra"]),
+                   "previsao": l["previsao"], "aberto": l["aberto"], "atual": l["atual"]} for l in historico],
+    } if detalhes else None
+    return render(request, "financas/mes_detalhes.html", {
+        "conta": conta,
+        "hoje": hoje,
+        "mes": primeiro,
+        "detalhes_mes": detalhes,
+        "grafico": grafico,
+        "historico_meses": historico,
+        "mes_anterior": (primeiro - timedelta(days=1)).strftime("%Y-%m"),
+        "mes_seguinte": (primeiro + timedelta(days=32)).strftime("%Y-%m"),
+        "mes_hoje": hoje.strftime("%Y-%m"),
+        "pode_voltar": primeiro > conta.data_inicio.replace(day=1),
+    })
 
 
 @com_familia
@@ -553,7 +595,6 @@ def painel(request, pk):
         "vazios_inicio": vazios_inicio,
         "resumo_mes": _resumo_mes(ativos, hoje),
         "totais_mes": totais_do_mes(dias),
-        "detalhes_mes": detalhes_do_mes(dias, hoje),
         "historico_meses": _historico_meses(conta, hoje, primeiro, dias),
         "pode_voltar": primeiro > conta.data_inicio.replace(day=1),
         "anos_seletor": meses_do_seletor(

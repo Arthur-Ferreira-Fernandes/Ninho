@@ -2071,13 +2071,32 @@ class DetalhesDoMesTests(TestCase):
         d = detalhes_do_mes(extrato_mes(self.conta, 2026, 1), date(2026, 1, 15))
         self.assertEqual(d["resultado"], Decimal("-510.00"))
         self.assertEqual(d["barras"]["gasto"], 100.0)   # a barra maior ocupa tudo; o recebido fica menor
-        r = self.client.get(self.painel, {"mes": "2026-01"})
+        r = self.client.get(reverse("financas:mes_detalhes", args=[self.conta.pk]), {"mes": "2026-01"})
         self.assertContains(r, "Você gasta mais do que recebe")
         self.assertContains(r, "Faltam R$ 510,00")
 
-    def test_painel_tem_a_janela(self):
+    def test_painel_leva_para_a_pagina_do_mes(self):
         r = self.client.get(self.painel, {"mes": "2026-01"})
-        self.assertContains(r, 'id="detalhes-mes"')
-        self.assertContains(r, "Ver todos os detalhes")
+        url = reverse("financas:mes_detalhes", args=[self.conta.pk]) + "?mes=2026-01"
+        self.assertContains(r, f'href="{url}"')
+        self.assertNotContains(r, "<dialog")
+
+    def test_pagina_do_mes(self):
+        url = reverse("financas:mes_detalhes", args=[self.conta.pk])
+        r = self.client.get(url, {"mes": "2026-01"})
         self.assertContains(r, "Você gasta menos do que recebe")
+        self.assertContains(r, "Entra × sai ao longo do mês")
+        self.assertContains(r, 'id="dados-grafico"')
         self.assertNotContains(r, "Fica negativo")
+        dados = r.context["grafico"]
+        self.assertEqual(len(dados["dias"]), 31)
+        self.assertEqual(sum(d["entradas"] for d in dados["dias"]), 3000.0)
+        self.assertTrue(any(m["aberto"] for m in dados["meses"]))
+        # item leva para o dia no extrato do painel
+        self.assertContains(r, self.painel + "?mes=2026-01&dia=2026-01-05#extrato")
+
+    def test_pagina_do_mes_de_outra_familia(self):
+        outro = self.client_class()
+        cadastrar(outro, username="maria", familia="Outra")
+        r = outro.get(reverse("financas:mes_detalhes", args=[self.conta.pk]))
+        self.assertEqual(r.status_code, 404)

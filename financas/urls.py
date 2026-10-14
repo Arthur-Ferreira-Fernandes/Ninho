@@ -24,6 +24,7 @@ urlpatterns = [
     path("familia/pessoas/<int:membro_pk>/remover/", views.membro_remover, name="membro_remover"),
     path("contas/nova/", views.conta_nova, name="conta_nova"),
     path("contas/<int:pk>/", views.painel, name="painel"),
+    path("contas/<int:pk>/mes/", views.mes_detalhes, name="mes_detalhes"),
     path("contas/<int:pk>/editar/", views.conta_editar, name="conta_editar"),
     path("contas/<int:pk>/uso-diario/", views.uso_diario, name="uso_diario"),
     path("contas/<int:pk>/gastos-do-dia/", views.gasto_dia_adicionar, name="gasto_dia_adicionar"),

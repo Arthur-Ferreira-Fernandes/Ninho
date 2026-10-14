@@ -1,0 +1,174 @@
+{% extends "financas/base.html" %}{% load static dinheiro %}
+{% block titulo %}{{ mes|date:"F"|capfirst }} de {{ mes|date:"Y" }} · {{ conta.nome }} · {{ marca.nome }}{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="{% url 'financas:painel' conta.pk %}?mes={{ mes|date:'Y-m' }}#mensal">← {{ conta.nome }}</a>
+
+<div class="mes-topo">
+  <div>
+    <span class="mes-sobretitulo">Recebido × gasto</span>
+    <h1>{{ mes|date:"F"|capfirst }} de {{ mes|date:"Y" }}</h1>
+  </div>
+  <nav class="mes-nav" aria-label="Navegar entre meses">
+    {% if pode_voltar %}<a class="btn fantasma" href="?mes={{ mes_anterior }}" aria-label="Mês anterior">‹</a>{% endif %}
+    <a class="btn fantasma" href="?mes={{ mes_seguinte }}" aria-label="Próximo mês">›</a>
+    {% if mes|date:"Y-m" != mes_hoje %}<a class="btn sec" href="?mes={{ mes_hoje }}">Este mês</a>{% endif %}
+  </nav>
+</div>
+
+{% if not detalhes_mes %}
+<div class="card"><p class="vazio">Este mês é anterior ao início do cálculo ({{ conta.data_inicio|date:"d/m/Y" }}).</p></div>
+{% else %}
+{% with d=detalhes_mes %}
+<section class="mes-resposta">
+  <div class="card veredito-card {% if d.resultado < 0 %}negativo{% else %}positivo{% endif %}">
+    <span class="veredito-rotulo">{% if not d.recebido %}Nada a receber neste mês{% elif d.resultado < 0 %}Você gasta mais do que recebe{% else %}Você gasta menos do que recebe{% endif %}</span>
+    <strong class="veredito-valor">{% if d.resultado < 0 %}Faltam {{ d.resultado|brl|cut:"-" }}{% else %}Sobram {{ d.resultado|brl }}{% endif %}</strong>
+    <p>
+      {% if d.pct_gasto is not None %}Os gastos usam <b>{{ d.pct_gasto }}%</b> do que entra.{% endif %}
+      {% if d.investido.total %}Investindo {{ d.investido.total|brl }}, {% if d.sobra < 0 %}<b>faltam {{ d.sobra|brl|cut:"-" }}</b>{% else %}ainda <b>sobram {{ d.sobra|brl }}</b>{% endif %}.{% endif %}
+    </p>
+    {% if d.ha_previstos %}<small>Inclui valores previstos (≈), que ainda podem mudar.</small>{% endif %}
+  </div>
+  <div class="kpis">
+    <div class="card kpi"><span><i class="chave seg-recebido"></i>Recebido</span><b>{{ d.recebido|brl }}</b>
+      <small>{{ d.recebimentos|length }} recebimento{{ d.recebimentos|length|pluralize }}</small></div>
+    <div class="card kpi"><span><i class="chave seg-gasto"></i>Gasto</span><b>{{ d.gasto|brl }}</b>
+      <small>{% if d.pct_gasto is not None %}{{ d.pct_gasto }}% do recebido{% else %}sem recebimentos{% endif %}</small></div>
+    <div class="card kpi"><span><i class="chave seg-investido"></i>Investido</span><b>{{ d.investido.total|brl }}</b>
+      <small>{% if d.investido.total %}{{ d.investido.pct }}% do recebido{% else %}nada neste mês{% endif %}</small></div>
+    <div class="card kpi"><span>Depois de investir</span><b class="{% if d.sobra < 0 %}neg{% else %}pos{% endif %}">{% if d.sobra > 0 %}+{% endif %}{{ d.sobra|brl }}</b>
+      <small>recebido − gasto − investido</small></div>
+  </div>
+</section>
+
+<section class="graficos">
+  <figure class="card grafico-card largo">
+    <figcaption>
+      <h2>Entra × sai ao longo do mês</h2>
+      <p>Quanto já entrou e quanto já saiu até cada dia. Onde a linha laranja passa da verde, o mês está gastando mais do que recebeu até ali.</p>
+    </figcaption>
+    <ul class="legenda-grafico">
+      <li><i class="chave-linha seg-recebido"></i>Recebido acumulado</li>
+      <li><i class="chave-linha seg-gasto"></i>Gasto acumulado</li>
+      {% if d.investido.total %}<li><i class="chave-linha seg-investido"></i>Gasto + investido</li>{% endif %}
+    </ul>
+    <div class="grafico" data-grafico="acumulado" role="img" aria-label="Linhas do recebido e do gasto acumulados por dia do mês. Os valores estão nas listas abaixo."></div>
+  </figure>
+
+  <figure class="card grafico-card largo">
+    <figcaption>
+      <h2>Dia a dia</h2>
+      <p>Para cima, o que entra em cada dia; para baixo, o que sai. Passe o mouse (ou use Tab) para ver os itens do dia.</p>
+    </figcaption>
+    <ul class="legenda-grafico">
+      <li><i class="chave seg-recebido"></i>Entrada</li>
+      <li><i class="chave seg-gasto"></i>Gasto</li>
+      {% if d.investido.total %}<li><i class="chave seg-investido"></i>Investido</li>{% endif %}
+      <li class="legenda-previsto"><i class="chave seg-gasto previsto"></i>Mais claro: previsto</li>
+    </ul>
+    <div class="grafico" data-grafico="diario" aria-label="Entradas e saídas por dia do mês"></div>
+  </figure>
+
+  <figure class="card grafico-card">
+    <figcaption>
+      <h2>Para onde vai o que entra</h2>
+      <p>Cada grupo em % do recebido no mês.</p>
+    </figcaption>
+    <div class="barras-grupos">
+      {% for g in d.gastos %}
+      <a class="barra-grupo" href="#grupo-{{ g.chave }}">
+        <span class="bg-nome">{{ g.titulo }}</span>
+        <span class="bg-trilho"><i class="seg-gasto" style="width: {{ g.largura }}%"></i></span>
+        <span class="bg-valor"><b>{% if d.recebido %}{{ g.pct }}%{% else %}—{% endif %}</b> {{ g.total|brl }}</span>
+      </a>
+      {% endfor %}
+      {% if d.investido.itens %}
+      <a class="barra-grupo" href="#grupo-investido">
+        <span class="bg-nome">Investido</span>
+        <span class="bg-trilho"><i class="seg-investido" style="width: {{ d.investido.largura }}%"></i></span>
+        <span class="bg-valor"><b>{% if d.recebido %}{{ d.investido.pct }}%{% else %}—{% endif %}</b> {{ d.investido.total|brl }}</span>
+      </a>
+      {% endif %}
+      {% if d.recebido %}
+      <div class="barra-grupo total">
+        <span class="bg-nome">Total que sai</span>
+        <span class="bg-trilho"><i class="seg-gasto" style="width: {{ d.barras.gasto|stringformat:'.2f' }}%"></i><i class="seg-investido" style="width: {{ d.barras.investido|stringformat:'.2f' }}%"></i>
+          <span class="bg-limite" style="left: {{ d.barras.linha|stringformat:'.2f' }}%" title="100% do que entra"></span></span>
+        <span class="bg-valor"><b>{% widthratio d.saidas d.recebido 100 %}%</b> {{ d.saidas|brl }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </figure>
+
+  <figure class="card grafico-card">
+    <figcaption>
+      <h2>Mês a mês</h2>
+      <p>Recebido e gasto de cada mês. Clique em um mês para abri-lo.</p>
+    </figcaption>
+    <ul class="legenda-grafico">
+      <li><i class="chave seg-recebido"></i>Recebido</li>
+      <li><i class="chave seg-gasto"></i>Gasto</li>
+      <li class="legenda-previsto"><i class="chave seg-gasto previsto"></i>Mais claro: previsão</li>
+    </ul>
+    <div class="grafico" data-grafico="meses" aria-label="Recebido e gasto por mês"></div>
+    <details class="ver-tabela">
+      <summary>Ver em tabela</summary>
+      <div class="tabela-rolagem-x">
+      <table class="lista">
+        <thead><tr><th>Mês</th><th class="num">Recebido</th><th class="num">Gasto</th><th class="num">Investido</th><th class="num">Sobra</th></tr></thead>
+        <tbody>
+          {% for l in historico_meses %}
+          <tr{% if l.aberto %} class="aberto"{% endif %}><td><a href="?mes={{ l.mes|date:'Y-m' }}">{{ l.mes|date:"M/Y"|capfirst }}</a>{% if l.previsao %} <span class="rotulo">previsão</span>{% endif %}</td>
+            <td class="num">{{ l.recebido|brl }}</td><td class="num">{{ l.gasto|brl }}</td><td class="num">{{ l.guardado|brl }}</td>
+            <td class="num {% if l.sobra < 0 %}neg{% else %}pos{% endif %}">{% if l.sobra > 0 %}+{% endif %}{{ l.sobra|brl }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </details>
+  </figure>
+</section>
+
+<section class="mes-itens">
+  <div class="card">
+    <div class="dm-grupo-cabeca"><h2>De onde vem</h2><b class="pos">{{ d.recebido|brl }}</b></div>
+    {% include "financas/_detalhes_itens.html" with itens=d.recebimentos sinal="+" classe="pos" %}
+  </div>
+  <div class="card">
+    <div class="dm-grupo-cabeca"><h2>Para onde vai</h2><b class="neg">{{ d.saidas|brl }}</b></div>
+    {% for g in d.gastos %}
+    <details class="dm-grupo" id="grupo-{{ g.chave }}" open>
+      <summary>
+        <span class="dm-g-nome">{{ g.titulo }} <small>{{ g.itens|length }} ite{{ g.itens|length|pluralize:"m,ns" }}</small></span>
+        <span class="dm-g-pct">{% if d.recebido %}{{ g.pct }}%{% endif %}</span>
+        <b>{{ g.total|brl }}</b>
+      </summary>
+      {% include "financas/_detalhes_itens.html" with itens=g.itens sinal="−" classe="neg" %}
+    </details>
+    {% endfor %}
+    {% if d.investido.itens %}
+    <details class="dm-grupo investido-grupo" id="grupo-investido" open>
+      <summary>
+        <span class="dm-g-nome">Investido <small>não é gasto</small></span>
+        <span class="dm-g-pct">{% if d.recebido %}{{ d.investido.pct }}%{% endif %}</span>
+        <b>{{ d.investido.total|brl }}</b>
+      </summary>
+      {% include "financas/_detalhes_itens.html" with itens=d.investido.itens sinal="−" classe="investido" %}
+    </details>
+    {% endif %}
+    {% if d.pulados %}
+    <details class="dm-grupo pulados-grupo">
+      <summary><span class="dm-g-nome">Puladas neste mês <small>não entram nas contas</small></span><b class="rotulo">{{ d.pulados|length }}</b></summary>
+      {% include "financas/_detalhes_itens.html" with itens=d.pulados riscado=True %}
+    </details>
+    {% endif %}
+    <p class="dm-legenda">≈ valor previsto ou estimado. Clique em um item para ver o dia no extrato.</p>
+  </div>
+</section>
+{% endwith %}
+
+<div class="tooltip-grafico" id="tooltip-grafico" role="status" hidden></div>
+{{ grafico|json_script:"dados-grafico" }}
+<script src="{% static 'financas/js/mes.js' %}" defer></script>
+{% endif %}
+{% endblock %}

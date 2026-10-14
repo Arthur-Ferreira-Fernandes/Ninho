@@ -383,7 +383,7 @@
     </div>
   </div>
 
-  <aside class="card resumo-mes-card{% if detalhes_mes %} abre-detalhes{% endif %}"{% if detalhes_mes %} data-abrir="detalhes-mes" title="Ver todos os detalhes do mês"{% endif %}>
+  <aside class="card resumo-mes-card{% if totais_mes %} abre-detalhes{% endif %}"{% if totais_mes %} data-href="{% url 'financas:mes_detalhes' conta.pk %}?mes={{ mes|date:'Y-m' }}" title="Ver o mês em detalhes"{% endif %}>
     <h3>Resumo de {{ mes|date:"F"|lower }}</h3>
     {% if totais_mes %}
     <div class="resultado-mes">
@@ -407,7 +407,7 @@
       <div><dt>Dias no negativo</dt>
         <dd class="{% if resumo_mes.dias_negativos %}neg{% else %}pos{% endif %}">{{ resumo_mes.dias_negativos }} de {{ resumo_mes.dias }}</dd></div>
     </dl>
-    <button type="button" class="btn sec bloco ver-detalhes" data-abrir="detalhes-mes" aria-haspopup="dialog">Ver todos os detalhes</button>
+    {% if totais_mes %}<a class="btn sec bloco ver-detalhes" href="{% url 'financas:mes_detalhes' conta.pk %}?mes={{ mes|date:'Y-m' }}">Ver o mês em detalhes →</a>{% endif %}
     {% else %}
     <p class="vazio">Este mês é anterior ao início do cálculo ({{ conta.data_inicio|date:"d/m/Y" }}).</p>
     {% endif %}
@@ -867,20 +867,14 @@
   </div>
 </div>
 
-{% if detalhes_mes %}{% include "financas/_detalhes_mes.html" %}{% endif %}
 
 <script>
-  // resumo do mês: abre a janela com todos os detalhes
+  // resumo do mês: o quadro todo leva para a página de detalhes (o botão é o caminho pelo teclado)
   (function () {
-    const janela = document.getElementById("detalhes-mes");
-    if (!janela) return;
-    document.addEventListener("click", (e) => {
-      const alvo = e.target.closest("[data-abrir]");
-      if (!alvo || (e.target.closest("a") && !janela.contains(e.target))) return;
-      janela.showModal();
-    });
-    janela.addEventListener("click", (e) => {
-      if (e.target === janela || e.target.closest("a")) janela.close();   // fora do conteúdo ou indo para um dia
+    const quadro = document.querySelector(".resumo-mes-card[data-href]");
+    if (!quadro) return;
+    quadro.addEventListener("click", (e) => {
+      if (!e.target.closest("a, button")) location.href = quadro.dataset.href;
     });
   })();
 

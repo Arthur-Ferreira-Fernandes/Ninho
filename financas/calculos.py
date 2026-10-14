@@ -925,3 +925,33 @@ def detalhes_do_mes(dias, hoje):
         "pulados": pulados,
         "ha_previstos": any(i.previsto for g in gastos for i in g["itens"]) or any(i.previsto for i in recebimentos),
     }
+
+
+def fluxo_diario(dias, hoje):
+    """Por dia do mês: quanto entra, quanto é gasto e quanto é investido, com os itens.
+
+    Só valores do mês (não o saldo). Base dos gráficos da página de detalhes do mês.
+    """
+    serie = []
+    for d in dias:
+        if not d.ativo:
+            continue
+        itens = []
+        investido = ZERO
+        for m in d.movimentos:
+            tipo = "entrada" if m.entrada else ("investido" if m.origem == "guardar" else "gasto")
+            if tipo == "investido":
+                investido += m.valor
+            itens.append({"nome": m.nome, "valor": float(m.valor), "tipo": tipo})
+        if d.gasto:
+            itens.append({"nome": "Dinheiro do dia a dia", "valor": float(d.gasto), "tipo": "gasto"})
+        serie.append({
+            "data": d.data.isoformat(),
+            "dia": d.data.day,
+            "entradas": float(d.entradas),
+            "gasto": float(d.saidas - investido + d.gasto),
+            "investido": float(investido),
+            "previsto": d.data > hoje,
+            "itens": itens,
+        })
+    return serie
