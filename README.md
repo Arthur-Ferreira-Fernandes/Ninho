@@ -105,3 +105,15 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python manage.py runserver      # porta 8001
 .venv/bin/python manage.py test financas
 ```
+
+## Programa no computador (Linux)
+
+Gera um executável único que sobe o Ninho e abre o navegador:
+
+```sh
+desktop/build.sh          # cria dist/ninho e o atalho "Ninho" no menu de aplicativos
+./dist/ninho              # http://127.0.0.1:8003
+```
+
+Os dados ficam em `~/.local/share/ninho` (banco `db.sqlite3` e a chave secreta), separados do executável:
+gerar uma versão nova não apaga nada. Fechar a janela do terminal encerra o programa.

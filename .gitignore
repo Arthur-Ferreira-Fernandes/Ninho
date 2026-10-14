@@ -7,3 +7,5 @@ staticfiles/
 dados.json
 backup*.sql
 backup*.sqlite3
+build/
+dist/
