@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .calculos import (alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
+from .calculos import (detalhes_do_mes, alerta_saldo, aplicar_escala, totais_do_mes, eventos_fixa, cronograma, extrato_mes, faturas, meses_do_seletor, proximas_fixas,
                        dia_de_guardar, guardados, proximo_fechamento, saldo_esperado, serie_diaria,
                        simular_mes)
 from .forms import (PerfilForm, SenhaForm, AporteForm, GastoDiaForm, AssinaturaForm, PagamentoContaForm, CartaoForm, CompraCartaoForm, ConferenciaForm, ContaFixaForm, ContaForm, EntrarFamiliaForm, FamiliaForm,
@@ -553,6 +553,7 @@ def painel(request, pk):
         "vazios_inicio": vazios_inicio,
         "resumo_mes": _resumo_mes(ativos, hoje),
         "totais_mes": totais_do_mes(dias),
+        "detalhes_mes": detalhes_do_mes(dias, hoje),
         "historico_meses": _historico_meses(conta, hoje, primeiro, dias),
         "pode_voltar": primeiro > conta.data_inicio.replace(day=1),
         "anos_seletor": meses_do_seletor(

@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .calculos import Dia, totais_do_mes, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
+from .calculos import Dia, detalhes_do_mes, totais_do_mes, aplicar_escala, nivel_cor, dia_de_guardar, guardados, eventos_fixa, proximas_fixas, cobrancas, cronograma, proximo_fechamento, serie_diaria, datas_da_fatura, faturas, meses_do_seletor, primeira_fatura, extrato_mes, gasto_no_periodo, saldo_esperado, simular_mes
 from .models import (Aporte, AssinaturaCartao, GastoDia, Cartao, CompraCartao, PagamentoConta, Conferencia, Conta, ContaFixa, Familia, Lancamento, Membro,
                      PedidoEntrada, UsoDiario)
 
@@ -2029,3 +2029,45 @@ class RemarcarPularTests(TestCase):
         self.assertContains(r, "Pular desta vez")
         r = self.client.get(painel, {"mes": "2026-01", "dia": "2026-01-05"})
         self.assertContains(r, "Pular neste mês")
+
+
+class DetalhesDoMesTests(TestCase):
+    def setUp(self):
+        cadastrar(self.client)
+        familia = User.objects.get(username="arthur").membro.familia
+        self.conta = Conta.objects.create(familia=familia, nome="Nubank", saldo_inicial=Decimal("500"),
+                                          data_inicio=date(2026, 1, 1), gasto_mensal=Decimal("310"))
+        ContaFixa.objects.create(conta=self.conta, nome="Aluguel", valor=Decimal("1000"), dia=5)
+        ContaFixa.objects.create(conta=self.conta, nome="Salário", valor=Decimal("3000"), dia=20,
+                                 tipo=ContaFixa.RECEITA, salario=True)
+        cartao = Cartao.objects.create(conta=self.conta, nome="Roxinho", dia_fechamento=25, dia_vencimento=10)
+        CompraCartao.objects.create(cartao=cartao, descricao="TV", valor_total=Decimal("600"), parcelas=3,
+                                    data_compra=date(2025, 12, 1))
+        self.painel = reverse("financas:painel", args=[self.conta.pk])
+
+    def test_totais_batem_com_o_resumo(self):
+        dias = extrato_mes(self.conta, 2026, 1)
+        d, t = detalhes_do_mes(dias, date(2026, 1, 15)), totais_do_mes(dias)
+        self.assertEqual(d["recebido"], t["recebido"])
+        self.assertEqual(d["gasto"], t["gasto"])
+        self.assertEqual(d["inicio"] + d["recebido"] - d["gasto"] - d["investido"]["total"], d["fim"])
+        titulos = [g["titulo"] for g in d["gastos"]]
+        self.assertEqual(titulos, ["Contas fixas", "Cartão de crédito", "Dinheiro do dia a dia"])
+        fatura = d["gastos"][1]["itens"][0]
+        # comprada em 01/12: entra na fatura que fecha 25/12 e vence 10/01
+        self.assertEqual(fatura.subitens, [("TV", "1/3", Decimal("200.00"))])
+
+    def test_explica_o_dia_negativo(self):
+        d = detalhes_do_mes(extrato_mes(self.conta, 2026, 1), date(2026, 1, 15))
+        # 500 − 10/dia − aluguel no dia 5 → negativo em 05/01; volta com o salário no dia 20
+        self.assertEqual(d["negativo"].data, date(2026, 1, 5))
+        self.assertEqual([(i.nome, i.valor) for i in d["pesos"]],
+                         [("Aluguel", Decimal("1000")), ("Dinheiro do dia a dia (5 dias)", Decimal("50.00"))])
+        self.assertEqual(d["volta"].data, date(2026, 1, 20))
+        self.assertEqual(d["entrada_seguinte"].nome, "Salário")
+
+    def test_painel_tem_a_janela(self):
+        r = self.client.get(self.painel, {"mes": "2026-01"})
+        self.assertContains(r, 'id="detalhes-mes"')
+        self.assertContains(r, "Ver todos os detalhes")
+        self.assertContains(r, "Fica negativo em 05/01")

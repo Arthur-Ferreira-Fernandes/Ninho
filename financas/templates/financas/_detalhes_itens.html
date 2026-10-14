@@ -1,0 +1,23 @@
+{% load dinheiro %}
+{% if itens %}
+<ul class="dm-itens">
+  {% for i in itens %}
+  <li>
+    <a href="?mes={{ i.data|date:'Y-m' }}&dia={{ i.data|date:'Y-m-d' }}#extrato" class="dm-item{% if riscado %} riscado{% endif %}">
+      <span class="dm-data">{{ i.data|date:"d/m" }}</span>
+      <span class="dm-nome">{{ i.nome }}{% if i.detalhe %}<small>{{ i.detalhe }}</small>{% endif %}</span>
+      <b class="{{ classe }}">{% if i.previsto %}≈ {% endif %}{% if not riscado %}{{ sinal }} {% endif %}{{ i.valor|brl }}</b>
+    </a>
+    {% if i.subitens %}
+    <ul class="dm-subitens">
+      {% for nome, rotulo, valor in i.subitens %}
+      <li><span>{{ nome }}{% if rotulo %} <span class="parcela-tag">{{ rotulo }}</span>{% endif %}</span><span>{{ valor|brl }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="dm-vazio">Nada neste mês.</p>
+{% endif %}

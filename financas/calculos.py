@@ -802,3 +802,128 @@ def totais_do_mes(dias):
         "dia_a_dia": sum((d.gasto for d in ativos), ZERO),
         "fim": ativos[-1].esperado,
     }
+
+
+@dataclass
+class ItemDetalhe:
+    data: date
+    nome: str
+    valor: Decimal
+    detalhe: str = ""
+    previsto: bool = False      # ainda não aconteceu ou o valor é estimativa
+    subitens: list = field(default_factory=list)   # (nome, rótulo, valor), ex.: itens da fatura
+
+
+def _item_do_movimento(m, data, hoje):
+    """Converte um movimento do extrato em linha de detalhe."""
+    if m.origem == "fatura":
+        f = m.objeto
+        subitens = ([(p.compra.descricao, p.rotulo if p.compra.parcelas > 1 else "", p.valor) for p in f.parcelas]
+                    + [(c.assinatura.descricao, "mensal", c.valor) for c in f.cobrancas])
+        return ItemDetalhe(data, m.nome, m.valor, f"fecha {f.fechamento:%d/%m}", data > hoje, subitens)
+    if m.origem == "fixa":
+        e, fixa = m.evento, m.objeto
+        if fixa.salario:
+            detalhe = "salário"
+        elif fixa.periodica:
+            detalhe = f"a cada {fixa.intervalo_dias} dias"
+        elif fixa.variavel:
+            detalhe = "conta variável" if e.feito else "conta variável · estimativa"
+        else:
+            detalhe = "conta fixa"
+        if e.remarcado or (e.ajustado and e.data != e.vencimento):
+            detalhe += f" · remarcada (era {e.vencimento:%d/%m})"
+        estimado = e.estimado or (fixa.periodica and not e.feito)
+        return ItemDetalhe(data, m.nome, m.valor, detalhe, estimado or (data > hoje and not e.feito))
+    if m.origem == "guardar":
+        g = m.objeto
+        detalhe = "valor avulso" if g.avulso else ("confirmado" if g.confirmado else "previsto no dia de maior saldo")
+        return ItemDetalhe(data, m.nome, m.valor, detalhe, not g.avulso and not g.confirmado)
+    return ItemDetalhe(data, m.nome, m.valor, "lançamento avulso", data > hoje)
+
+
+def _grupo(titulo, itens, base):
+    total = sum((i.valor for i in itens), ZERO)
+    return {"titulo": titulo, "itens": itens, "total": total,
+            "pct": min(100, round(total * 100 / base)) if base > 0 else 0}
+
+
+def detalhes_do_mes(dias, hoje):
+    """Tudo o que entra e sai no mês, item por item, para entender o resultado.
+
+    Usa os mesmos dias de extrato_mes(), então os totais batem com totais_do_mes().
+    """
+    from .templatetags.dinheiro import brl
+    ativos = [d for d in dias if d.ativo]
+    if not ativos:
+        return None
+    recebimentos, fixas, cartao, avulsos, investido, pulados = [], [], [], [], [], []
+    for d in ativos:
+        for m in d.movimentos:
+            item = _item_do_movimento(m, d.data, hoje)
+            if m.entrada:
+                recebimentos.append(item)
+            elif m.origem == "guardar":
+                investido.append(item)
+            elif m.origem == "fatura":
+                cartao.append(item)
+            elif m.origem == "fixa":
+                fixas.append(item)
+            else:
+                avulsos.append(item)
+        for m in d.pulados:
+            pulados.append(ItemDetalhe(d.data, m.nome, m.objeto.valor, "pulada nesta ocorrência"))
+
+    # dinheiro do dia a dia: o que já passou e o que ainda está previsto
+    passados = [d for d in ativos if d.data <= hoje]
+    futuros = [d for d in ativos if d.data > hoje]
+    dia_a_dia = []
+    if passados:
+        lancados = sum(1 for d in passados if d.itens)
+        detalhe = f"{len(passados)} dia{'s' if len(passados) > 1 else ''}"
+        if lancados:
+            detalhe += f" · {lancados} com gastos lançados"
+        dia_a_dia.append(ItemDetalhe(passados[-1].data, "Já usado" if futuros else "Usado no mês",
+                                     sum((d.gasto for d in passados), ZERO), detalhe))
+    if futuros:
+        dia_a_dia.append(ItemDetalhe(futuros[-1].data, "Previsto até o fim do mês",
+                                     sum((d.gasto for d in futuros), ZERO),
+                                     f"{len(futuros)} dia{'s' if len(futuros) > 1 else ''} · "
+                                     f"{brl(futuros[0].disponivel)} por dia", True))
+
+    recebido = sum((i.valor for i in recebimentos), ZERO)
+    base = recebido or sum((d.saidas + d.gasto for d in ativos), ZERO)
+    gastos = [g for g in (_grupo("Contas fixas", fixas, base),
+                          _grupo("Cartão de crédito", cartao, base),
+                          _grupo("Dinheiro do dia a dia", dia_a_dia, base),
+                          _grupo("Lançamentos avulsos", avulsos, base)) if g["itens"]]
+
+    # o primeiro dia no negativo e o que mais pesou até ele
+    negativo = next((d for d in ativos if d.esperado < 0), None)
+    pesos = []
+    if negativo:
+        itens_ate = [i for i in fixas + cartao + avulsos + investido if i.data <= negativo.data]
+        ate = [d for d in ativos if d.data <= negativo.data]
+        itens_ate.append(ItemDetalhe(negativo.data, f"Dinheiro do dia a dia ({len(ate)} dia{'s' if len(ate) > 1 else ''})",
+                                     sum((d.gasto for d in ate), ZERO)))
+        pesos = sorted(itens_ate, key=lambda i: i.valor, reverse=True)[:3]
+        entradas_depois = [i for i in recebimentos if i.data > negativo.data]
+        volta = next((d for d in ativos if d.data > negativo.data and d.esperado >= 0), None)
+    else:
+        entradas_depois, volta = [], None
+
+    return {
+        "inicio": ativos[0].inicio,
+        "fim": ativos[-1].esperado,
+        "recebimentos": sorted(recebimentos, key=lambda i: i.data),
+        "recebido": recebido,
+        "gastos": gastos,
+        "gasto": sum((g["total"] for g in gastos), ZERO),
+        "investido": _grupo("Investido", investido, base),
+        "pulados": pulados,
+        "negativo": negativo,
+        "pesos": pesos,
+        "volta": volta,
+        "entrada_seguinte": entradas_depois[0] if entradas_depois else None,
+        "menor": min(ativos, key=lambda d: d.esperado),
+    }

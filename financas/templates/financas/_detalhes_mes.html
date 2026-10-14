@@ -1,0 +1,81 @@
+{% load dinheiro %}
+<dialog class="detalhes-mes" id="detalhes-mes" aria-labelledby="detalhes-mes-titulo">
+  <div class="dm-cabeca">
+    <div>
+      <h2 id="detalhes-mes-titulo">{{ mes|date:"F"|capfirst }} de {{ mes|date:"Y" }} em detalhes</h2>
+      <p>Tudo o que entra e sai no mês. Clique em um item para ver o dia.</p>
+    </div>
+    <form method="dialog"><button class="btn fantasma dm-fechar" aria-label="Fechar">✕</button></form>
+  </div>
+
+  <div class="dm-corpo">
+    {% with d=detalhes_mes %}
+    <section class="dm-ponte" aria-label="Do saldo inicial ao final">
+      <div><span>Começa com</span><b>{{ d.inicio|brl }}</b></div>
+      <div><span>+ Recebido</span><b class="pos">{{ d.recebido|brl }}</b></div>
+      <div><span>− Gasto</span><b class="neg">{{ d.gasto|brl }}</b></div>
+      <div><span>− Investido</span><b class="investido">{{ d.investido.total|brl }}</b></div>
+      <div class="dm-ponte-fim"><span>{% if resumo_mes.encerrado %}Terminou com{% else %}Deve terminar com{% endif %}</span>
+        <b class="{% if d.fim < 0 %}neg{% endif %}">{{ d.fim|brl }}</b></div>
+    </section>
+
+    {% if d.negativo %}
+    <section class="dm-alerta neg-alerta">
+      <h3>Fica negativo em {{ d.negativo.data|date:"d/m" }}</h3>
+      <p>Nesse dia o saldo esperado chega a <b>{{ d.negativo.esperado|brl }}</b>{% if d.menor.esperado < d.negativo.esperado %} e o pior momento é <b>{{ d.menor.esperado|brl }}</b> em {{ d.menor.data|date:"d/m" }}{% endif %}.
+        {% if d.volta %}Volta ao positivo em {{ d.volta.data|date:"d/m" }}{% if d.entrada_seguinte %}, com {{ d.entrada_seguinte.nome }} ({{ d.entrada_seguinte.valor|brl }}){% endif %}.{% else %}Não volta ao positivo neste mês.{% endif %}</p>
+      {% if d.pesos %}
+      <p class="dm-pesos-titulo">O que mais pesou até lá:</p>
+      <ol class="dm-pesos">
+        {% for i in d.pesos %}<li><span>{{ i.nome }} <small>{{ i.data|date:"d/m" }}</small></span><b>{{ i.valor|brl }}</b></li>{% endfor %}
+      </ol>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="dm-alerta ok-alerta">
+      <p>Não fica negativo. O menor saldo é <b>{{ d.menor.esperado|brl }}</b> em {{ d.menor.data|date:"d/m" }}.</p>
+    </section>
+    {% endif %}
+
+    {% if d.recebido or d.gasto %}
+    <section aria-label="Para onde vai o dinheiro">
+      <h3 class="dm-titulo">Para onde vai {% if d.recebido %}o que entra{% else %}o dinheiro{% endif %}</h3>
+      <div class="dm-barras">
+        {% for g in d.gastos %}
+        <div class="dm-barra"><span>{{ g.titulo }}</span><i style="--p: {{ g.pct }}%" class="b-gasto"></i><b>{{ g.pct }}%</b></div>
+        {% endfor %}
+        {% if d.investido.itens %}<div class="dm-barra"><span>Investido</span><i style="--p: {{ d.investido.pct }}%" class="b-investido"></i><b>{{ d.investido.pct }}%</b></div>{% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section>
+      <div class="dm-grupo-cabeca"><h3>Recebimentos</h3><b class="pos">{{ d.recebido|brl }}</b></div>
+      {% include "financas/_detalhes_itens.html" with itens=d.recebimentos sinal="+" classe="pos" %}
+    </section>
+
+    {% for g in d.gastos %}
+    <section>
+      <div class="dm-grupo-cabeca"><h3>{{ g.titulo }}</h3><b class="neg">{{ g.total|brl }}</b></div>
+      {% include "financas/_detalhes_itens.html" with itens=g.itens sinal="−" classe="neg" %}
+    </section>
+    {% endfor %}
+
+    {% if d.investido.itens %}
+    <section>
+      <div class="dm-grupo-cabeca"><h3>Investido</h3><b class="investido">{{ d.investido.total|brl }}</b></div>
+      {% include "financas/_detalhes_itens.html" with itens=d.investido.itens sinal="−" classe="investido" %}
+    </section>
+    {% endif %}
+
+    {% if d.pulados %}
+    <section>
+      <div class="dm-grupo-cabeca"><h3>Puladas neste mês</h3><span class="rotulo">não entram nas contas</span></div>
+      {% include "financas/_detalhes_itens.html" with itens=d.pulados riscado=True %}
+    </section>
+    {% endif %}
+
+    <p class="dm-legenda">≈ valor previsto ou estimado, que ainda pode mudar.</p>
+    {% endwith %}
+  </div>
+</dialog>
